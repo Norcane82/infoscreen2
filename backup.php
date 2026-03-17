@@ -4,22 +4,25 @@ require_once __DIR__ . '/functions.php';
 $backupDir = __DIR__ . '/data/backups';
 if (!is_dir($backupDir)) {
     @mkdir($backupDir, 2775, true);
+    @chmod($backupDir, 02775);
 }
 
 $file = 'infoscreen2_backup_' . date('Ymd_His') . '.tar.gz';
 $full = $backupDir . '/' . $file;
 
 $cmd = 'tar -czf ' . escapeshellarg($full)
-    . ' ' . escapeshellarg(__DIR__)
-    . ' ' . escapeshellarg('/usr/local/bin/infoscreen2-kiosk.sh')
-    . ' ' . escapeshellarg('/usr/local/bin/infoscreen2-restart-player.sh')
-    . ' ' . escapeshellarg('/etc/systemd/system/infoscreen2-kiosk.service')
-    . ' >/dev/null 2>&1';
+    . ' -C ' . escapeshellarg(dirname(__DIR__))
+    . ' ' . escapeshellarg(basename(__DIR__))
+    . ' 2>&1';
 
-@system($cmd, $rc);
+exec($cmd, $output, $rc);
 
 if ($rc === 0 && is_file($full)) {
+    @chmod($full, 0664);
     appendLog('watchdog.log', 'Manuelle Aktion: Backup erstellt: ' . $file);
+} else {
+    appendLog('watchdog.log', 'Backup fehlgeschlagen: ' . implode(' | ', $output));
 }
+
 header('Location: admin.php');
 exit;

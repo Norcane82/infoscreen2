@@ -52,6 +52,8 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
     <a class="btn" href="index.php" target="_blank">Player öffnen</a>
     <a class="btn" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
     <a class="btn" href="status.php" target="_blank">Status JSON</a>
+    <a class="btn" href="view_log.php" target="_blank">Logs anzeigen</a>
+    <a class="btn" href="backups.php" target="_blank">Backups</a>
     <a class="btn" href="watchdog_reset.php">Watchdog zurücksetzen</a>
   </div>
 </div>
@@ -62,6 +64,8 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
     <form action="player_action.php" method="post"><input type="hidden" name="action" value="restart_player"><button class="btn" type="submit">Player jetzt neu starten</button></form>
     <form action="player_action.php" method="post"><input type="hidden" name="action" value="fallback_on"><button class="btn" type="submit">Fallback aktivieren</button></form>
     <form action="player_action.php" method="post"><input type="hidden" name="action" value="fallback_off"><button class="btn" type="submit">Fallback deaktivieren</button></form>
+    <form action="run_watchdog.php" method="post"><button class="btn" type="submit">Watchdog jetzt ausführen</button></form>
+    <form action="backup.php" method="post"><button class="btn" type="submit">Backup erstellen</button></form>
   </div>
 </div>
 
