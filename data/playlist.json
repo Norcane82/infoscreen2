@@ -1,0 +1,10 @@
+[
+    {
+        "id": "clock-main",
+        "type": "clock",
+        "title": "Uhr",
+        "enabled": true,
+        "duration": 10,
+        "sort": 20
+    }
+]

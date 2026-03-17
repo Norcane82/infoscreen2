@@ -1,0 +1,42 @@
+{
+  "player": {
+    "defaultDuration": 8,
+    "imageFade": 1.2,
+    "videoMode": "until_end",
+    "background": "#ffffff",
+    "fit": "contain",
+    "shuffle": false,
+    "loop": true,
+    "startMuted": true,
+    "preloadNext": true
+  },
+  "clock": {
+    "enabled": true,
+    "duration": 10,
+    "background": "#ffffff",
+    "textColor": "#111111",
+    "showSeconds": true,
+    "fontScale": 1,
+    "logo": "",
+    "logoHeight": 100
+  },
+  "system": {
+    "watchdogEnabled": true,
+    "cpuLimit": 85,
+    "ramLimit": 85,
+    "checkIntervalSeconds": 30,
+    "cooldownSeconds": 180,
+    "maxRestartsIn30Min": 3,
+    "fallbackMode": "stop_services",
+    "apacheHealthcheck": true,
+    "apacheUrl": "http://127.0.0.1/infoscreen2/index.php",
+    "apacheTimeoutSeconds": 5,
+    "rebootAfterPlayerRestarts": 2,
+    "requireConsecutiveFails": 2
+  },
+  "services": {
+    "playerProcessName": "chromium",
+    "stopApacheOnFallback": false,
+    "stopScreenOnFallback": true
+  }
+}

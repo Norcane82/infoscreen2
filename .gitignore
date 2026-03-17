@@ -1,0 +1,5 @@
+logs/*.log
+cache/*.lock
+data/restart_log.json
+uploads/*
+!uploads/.gitkeep
