@@ -153,6 +153,7 @@ html,body{
       <iframe
         class="websiteFrame"
         src="<?= h($slide['url'] ?? '') ?>"
+        data-refresh="<?= (int)($slide['refreshSeconds'] ?? 0) ?>"
         referrerpolicy="no-referrer"
       ></iframe>
     <?php elseif ($type === 'clock'): ?>
