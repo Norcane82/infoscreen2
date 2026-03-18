@@ -40,10 +40,22 @@ function save_config(array $config): bool
     $defaults = app_defaults();
 
     $clean = [
-        'screen' => array_replace($defaults['screen'], is_array($config['screen'] ?? null) ? $config['screen'] : []),
-        'clock' => array_replace($defaults['clock'], is_array($config['clock'] ?? null) ? $config['clock'] : []),
-        'system' => array_replace($defaults['system'], is_array($config['system'] ?? null) ? $config['system'] : []),
+        'screen' => [],
+        'clock' => [],
+        'system' => [],
     ];
+
+    foreach ($defaults['screen'] as $key => $value) {
+        $clean['screen'][$key] = $config['screen'][$key] ?? $value;
+    }
+
+    foreach ($defaults['clock'] as $key => $value) {
+        $clean['clock'][$key] = $config['clock'][$key] ?? $value;
+    }
+
+    foreach ($defaults['system'] as $key => $value) {
+        $clean['system'][$key] = $config['system'][$key] ?? $value;
+    }
 
     if (isset($config['services']) && is_array($config['services'])) {
         $clean['services'] = $config['services'];
