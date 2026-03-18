@@ -8,8 +8,8 @@ $config = load_config();
 $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
 
-$watchdogState = read_json_file(HEALTH_FILE, [
-    'last_restart' => 0,
+$restartData = read_json_file(DATA_DIR . '/restart_log.json', [
+    'count_30m' => 0,
     'restarts' => [],
     'fallback_active' => false,
     'consecutive_failures' => 0,
@@ -22,14 +22,11 @@ if (is_file($fallbackFile)) {
     $fallbackText = trim((string)file_get_contents($fallbackFile));
 }
 
-function slideTypeLabel(array $item): string
-{
+function slideTypeLabel(array $item): string {
     $type = strtolower((string)($item['type'] ?? ''));
-
     if ($type === 'image' && (($item['sourceType'] ?? '') === 'pdf')) {
         return 'PDF-Seite';
     }
-
     $map = [
         'clock' => 'Uhr',
         'image' => 'Bild',
@@ -37,92 +34,101 @@ function slideTypeLabel(array $item): string
         'website' => 'Webseite',
         'pdf' => 'PDF',
     ];
-
     return $map[$type] ?? $type;
 }
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Infoscreen2 Verwaltung</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:20px;background:#f5f5f5;color:#222}
-h1,h2,h3{margin-top:0}
-.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-label{display:block;font-weight:700;margin-bottom:6px}
-input,select,button{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box}
-button{cursor:pointer;font-weight:700}
-.small{font-size:13px;color:#666}
+body{font-family:Arial,Helvetica,sans-serif;margin:18px;background:#f4f6f8;color:#1f2937}
+h1,h2{margin:0 0 12px}
+.card{background:#fff;border:1px solid #d7dce2;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+label{display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:#475569}
+input[type=text],input[type=url],input[type=number],select,input[type=file]{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+button,.btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+button.secondary,.btn.secondary{background:#475569}
+button.warn,.btn.warn{background:#d97706}
+button.danger,.btn.danger{background:#dc2626}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+small,.small{color:#64748b}
 table{width:100%;border-collapse:collapse}
-th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
-.actions form{display:inline}
-a.btn,button.btn{display:inline-block;width:auto;padding:8px 12px;text-decoration:none;background:#eee;color:#111;border:none;border-radius:8px}
-.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee;font-size:12px}
-.ok{background:#dff5e1}.off{background:#f8dddd}.warn{background:#fff0c7}
-code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
-.editRow{display:none;background:#fafafa}
-.live{font-family:monospace}
-</style></head><body>
+th,td{padding:10px 8px;border-top:1px solid #e5e7eb;vertical-align:top;text-align:left}
+th{font-size:12px;text-transform:uppercase;color:#64748b}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;background:#e2e8f0;color:#0f172a}
+.ok{background:#dcfce7;color:#166534}
+.off{background:#fee2e2;color:#991b1b}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px}
+.editRow{display:none;background:#f8fafc}
+code{background:#eef2ff;padding:2px 6px;border-radius:6px}
+.statusLine{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+</style>
+</head>
+<body>
+
 <h1>Infoscreen2 Verwaltung</h1>
 
-<div class="card">
-  <div class="actions">
-    <a class="btn" href="index.php" target="_blank">Player öffnen</a>
-    <a class="btn" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
-    <a class="btn" href="status.php" target="_blank">Status JSON</a>
-    <a class="btn" href="view_log.php" target="_blank">Logs anzeigen</a>
-    <a class="btn" href="backups.php" target="_blank">Backups</a>
-    <a class="btn" href="watchdog_reset.php">Watchdog zurücksetzen</a>
-  </div>
+<div class="toolbar" style="margin-bottom:16px">
+  <a class="btn secondary" href="index.php" target="_blank">Player öffnen</a>
+  <a class="btn secondary" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
+  <a class="btn secondary" href="status.php" target="_blank">Status JSON</a>
+  <a class="btn secondary" href="view_log.php">Logs anzeigen</a>
+  <a class="btn secondary" href="backups.php">Backups</a>
+  <form action="watchdog_reset.php" method="post" style="display:inline">
+    <button class="secondary" type="submit">Watchdog zurücksetzen</button>
+  </form>
 </div>
 
 <div class="card">
   <h2>Direkte Aktionen</h2>
-  <div class="actions">
-    <form action="player_action.php" method="post"><input type="hidden" name="action" value="restart_player"><button class="btn" type="submit">Player jetzt neu starten</button></form>
-    <form action="player_action.php" method="post"><input type="hidden" name="action" value="fallback_on"><button class="btn" type="submit">Fallback aktivieren</button></form>
-    <form action="player_action.php" method="post"><input type="hidden" name="action" value="fallback_off"><button class="btn" type="submit">Fallback deaktivieren</button></form>
-    <form action="run_watchdog.php" method="post"><button class="btn" type="submit">Watchdog jetzt ausführen</button></form>
-    <form action="backup.php" method="post"><button class="btn" type="submit">Backup erstellen</button></form>
-    <form action="cleanup_orphans.php" method="post" onsubmit="return confirm('Verwaiste Upload-Dateien wirklich löschen?');"><button class="btn" type="submit">Verwaiste Dateien aufräumen</button></form>
+  <div class="actions" style="margin-top:12px">
+    <form action="player_restart.php" method="post"><button type="submit">Player jetzt neu starten</button></form>
+    <form action="fallback_toggle.php" method="post"><input type="hidden" name="mode" value="on"><button class="warn" type="submit">Fallback aktivieren</button></form>
+    <form action="fallback_toggle.php" method="post"><input type="hidden" name="mode" value="off"><button class="secondary" type="submit">Fallback deaktivieren</button></form>
+    <form action="run_watchdog.php" method="post"><button class="secondary" type="submit">Watchdog jetzt ausführen</button></form>
+    <form action="backup.php" method="post"><button class="secondary" type="submit">Backup erstellen</button></form>
+    <form action="cleanup_uploads.php" method="post"><button class="danger" type="submit">Verwaiste Dateien aufräumen</button></form>
   </div>
 </div>
 
 <div class="card">
   <h2>Status</h2>
-  <div class="grid">
-    <div><strong>Fallback</strong><br><?php if (!empty($watchdogState['fallback_active'])): ?><span class="badge off">aktiv</span><?php else: ?><span class="badge ok">normal</span><?php endif; ?></div>
-    <div><strong>Letzte Aktion</strong><br><span class="badge warn"><?= h((string)($watchdogState['last_action'] ?? 'none')) ?></span></div>
-    <div><strong>Neustarts in 30 Min</strong><br><?= count((array)($watchdogState['restarts'] ?? [])) ?></div>
-    <div><strong>Consecutive Failures</strong><br><?= (int)($watchdogState['consecutive_failures'] ?? 0) ?></div>
+  <div class="statusLine" style="margin-top:10px">
+    <span class="badge <?= !empty($restartData['fallback_active']) ? 'off' : 'ok' ?>">Fallback <?= !empty($restartData['fallback_active']) ? 'aktiv' : 'normal' ?></span>
+    <span>Letzte Aktion: <code><?= h((string)($restartData['last_action'] ?? 'none')) ?></code></span>
+    <span>Neustarts in 30 Min: <strong><?= (int)($restartData['count_30m'] ?? 0) ?></strong></span>
+    <span>Consecutive Failures: <strong><?= (int)($restartData['consecutive_failures'] ?? 0) ?></strong></span>
+    <?php if ($fallbackText !== ''): ?>
+      <span>Fallback-Grund: <code><?= h($fallbackText) ?></code></span>
+    <?php endif; ?>
   </div>
-  <?php if ($fallbackText !== ''): ?><p class="small" style="margin-top:12px">Fallback-Grund: <code><?= h($fallbackText) ?></code></p><?php endif; ?>
-  <div id="liveStatus" class="live small" style="margin-top:12px">Lade Live-Status ...</div>
+  <p id="liveStatus" class="small" style="margin-top:12px">Lade Live-Status ...</p>
 </div>
 
 <div class="card">
-  <h2>Allgemeine Einstellungen</h2>
-  <form action="save_settings.php" method="post" enctype="multipart/form-data">
+  <form action="save_config.php" method="post" enctype="multipart/form-data">
+    <h2>Allgemeine Einstellungen</h2>
     <div class="grid">
       <div><label>Standarddauer</label><input type="number" name="defaultDuration" min="1" value="<?= (int)($config['screen']['defaultDuration'] ?? 8) ?>"></div>
-      <div><label>Bild-Fade</label><input type="number" step="0.1" name="imageFade" min="0" value="<?= h((string)($config['screen']['defaultFade'] ?? 1.2)) ?>"></div>
-      <div><label>Bild-Anpassung</label><select name="fit"><option value="contain" <?= ($config['screen']['fit'] ?? '') === 'contain' ? 'selected' : '' ?>>contain</option><option value="cover" <?= ($config['screen']['fit'] ?? '') === 'cover' ? 'selected' : '' ?>>cover</option></select></div>
-      <div><label>Hintergrundfarbe</label><input type="color" name="background" value="<?= h($config['screen']['background'] ?? '#ffffff') ?>"></div>
+      <div><label>Bild-Fade</label><input type="number" step="0.1" name="defaultFade" min="0" value="<?= h((string)($config['screen']['defaultFade'] ?? 1.2)) ?>"></div>
+      <div><label>Bild-Anpassung</label><select name="fit"><option value="contain" <?= ($config['screen']['fit'] ?? 'contain') === 'contain' ? 'selected' : '' ?>>contain</option><option value="cover" <?= ($config['screen']['fit'] ?? '') === 'cover' ? 'selected' : '' ?>>cover</option></select></div>
+      <div><label>Hintergrundfarbe</label><input type="text" name="background" value="<?= h((string)($config['screen']['background'] ?? '#ffffff')) ?>"></div>
     </div>
 
     <h2 style="margin-top:20px">Uhr</h2>
     <div class="grid">
       <div><label>Uhr aktiviert</label><select name="clockEnabled"><option value="1" <?= !empty($config['clock']['enabled']) ? 'selected' : '' ?>>Ja</option><option value="0" <?= empty($config['clock']['enabled']) ? 'selected' : '' ?>>Nein</option></select></div>
       <div><label>Uhr Dauer</label><input type="number" name="clockDuration" min="1" value="<?= (int)($config['clock']['defaultDuration'] ?? 10) ?>"></div>
-      <div><label>Uhr Hintergrund</label><input type="color" name="clockBackground" value="<?= h($config['clock']['background'] ?? '#ffffff') ?>"></div>
-      <div><label>Uhr Textfarbe</label><input type="color" name="clockTextColor" value="<?= h($config['clock']['textColor'] ?? '#111111') ?>"></div>
+      <div><label>Uhr Hintergrund</label><input type="text" name="clockBackground" value="<?= h((string)($config['clock']['background'] ?? '#ffffff')) ?>"></div>
+      <div><label>Uhr Textfarbe</label><input type="text" name="clockTextColor" value="<?= h((string)($config['clock']['textColor'] ?? '#111111')) ?>"></div>
       <div><label>Sekunden anzeigen</label><select name="clockShowSeconds"><option value="1" <?= !empty($config['clock']['showSeconds']) ? 'selected' : '' ?>>Ja</option><option value="0" <?= empty($config['clock']['showSeconds']) ? 'selected' : '' ?>>Nein</option></select></div>
-      <div><label>Logo für Uhr</label><input type="file" name="clockLogo" accept=".png,.jpg,.jpeg,.webp,.gif,.svg"><?php if (!empty($config['clock']['logo'])): ?><div class="small">Aktuell: <code><?= h($config['clock']['logo']) ?></code></div><?php endif; ?></div>
-      <div><label>Logo-Höhe</label><input type="number" name="clockLogoHeight" min="20" max="400" value="<?= (int)($config['clock']['logoHeight'] ?? 100) ?>"></div>
+      <div><label>Logo für Uhr</label><input type="file" name="clockLogo" accept=".png,.jpg,.jpeg,.webp,.gif"></div>
+      <div><label>Aktuell:</label><code><?= h((string)($config['clock']['logo'] ?? '')) ?></code></div>
+      <div><label>Logo-Höhe</label><input type="number" name="clockLogoHeight" min="20" value="<?= (int)($config['clock']['logoHeight'] ?? 100) ?>"></div>
     </div>
 
     <h2 style="margin-top:20px">Watchdog</h2>
@@ -169,6 +175,7 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
       <div><label>URL</label><input type="url" name="url" placeholder="https://www.example.org" required></div>
       <div><label>Dauer</label><input type="number" name="duration" min="1" value="<?= (int)($config['screen']['defaultDuration'] ?? 8) ?>"></div>
       <div><label>Neuladen nach Sekunden</label><input type="number" name="refreshSeconds" min="0" value="0"></div>
+      <div><label>Timeout Sekunden</label><input type="number" name="timeout" min="1" value="8"></div>
       <div><label>Aktiviert</label><select name="enabled"><option value="1" selected>Ja</option><option value="0">Nein</option></select></div>
     </div>
     <p style="margin-top:16px"><button type="submit">Webseiten-Folie speichern</button></p>
@@ -232,6 +239,7 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
             <?php if (($item['type'] ?? '') === 'website'): ?>
             <div><label>URL</label><input type="url" name="url" value="<?= h($item['url'] ?? '') ?>"></div>
             <div><label>Refresh Sekunden</label><input type="number" name="refreshSeconds" min="0" value="<?= (int)($item['refreshSeconds'] ?? 0) ?>"></div>
+            <div><label>Timeout Sekunden</label><input type="number" name="timeout" min="1" value="<?= (int)($item['timeout'] ?? 8) ?>"></div>
             <?php endif; ?>
           </div>
           <p style="margin-top:12px"><button type="submit">Änderungen speichern</button></p>
