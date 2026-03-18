@@ -37,8 +37,19 @@ function load_config(): array
 
 function save_config(array $config): bool
 {
-    $merged = array_replace_recursive(app_defaults(), $config);
-    return write_json_file(CONFIG_FILE, $merged);
+    $defaults = app_defaults();
+
+    $clean = [
+        'screen' => array_replace($defaults['screen'], is_array($config['screen'] ?? null) ? $config['screen'] : []),
+        'clock' => array_replace($defaults['clock'], is_array($config['clock'] ?? null) ? $config['clock'] : []),
+        'system' => array_replace($defaults['system'], is_array($config['system'] ?? null) ? $config['system'] : []),
+    ];
+
+    if (isset($config['services']) && is_array($config['services'])) {
+        $clean['services'] = $config['services'];
+    }
+
+    return write_json_file(CONFIG_FILE, $clean);
 }
 
 function load_playlist(): array
