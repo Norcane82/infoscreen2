@@ -1,10 +1,66 @@
-[
-    {
-        "id": "clock-main",
-        "type": "clock",
-        "title": "Uhr",
-        "enabled": true,
-        "duration": 10,
-        "sort": 20
-    }
-]
+{
+    "version": 2,
+    "slides": [
+        {
+            "id": "image-20260317105522-f050e8",
+            "type": "image",
+            "title": "Empfang",
+            "enabled": true,
+            "duration": 10,
+            "sort": 10,
+            "file": "uploads/Empfang_20260317_105522.png",
+            "fit": "contain",
+            "fade": 1.2,
+            "bg": "#ffffff"
+        },
+        {
+            "id": "image-20260317105548-4f3dab",
+            "type": "image",
+            "title": "BSD Öfnungszeiten",
+            "enabled": true,
+            "duration": 10,
+            "sort": 20,
+            "file": "uploads/BSD_20260317_105548.png",
+            "fit": "contain",
+            "fade": 1.2,
+            "bg": "#ffffff"
+        },
+        {
+            "id": "image-20260317105611-44d580",
+            "type": "image",
+            "title": "CBZ Öffnungszeiten",
+            "enabled": true,
+            "duration": 10,
+            "sort": 30,
+            "file": "uploads/CBZ_20260317_105611.png",
+            "fit": "contain",
+            "fade": 1.2,
+            "bg": "#ffffff"
+        },
+        {
+            "id": "image-20260317111259-220308",
+            "type": "image",
+            "title": "HS 2026",
+            "enabled": true,
+            "duration": 10,
+            "sort": 40,
+            "file": "uploads/HS_2026_20260317_111259.jpg",
+            "fit": "contain",
+            "fade": 1.2,
+            "bg": "#ffffff"
+        },
+        {
+            "id": "clock-main",
+            "type": "clock",
+            "title": "Uhr",
+            "enabled": true,
+            "duration": 10,
+            "sort": 50,
+            "fade": 1.2,
+            "clock": {
+                "showLogo": true,
+                "logo": "uploads/clock_logo_20260317_111843.png"
+            }
+        }
+    ]
+}
