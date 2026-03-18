@@ -78,6 +78,8 @@ function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $out
 
 if ($type === 'website') {
     $url = trim((string)($_POST['url'] ?? ''));
+    $refreshSeconds = max(0, (int)($_POST['refreshSeconds'] ?? 0));
+    $timeout = max(1, (int)($_POST['timeout'] ?? 8));
 
     if ($url === '') {
         redirect_admin();
@@ -92,6 +94,8 @@ if ($type === 'website') {
         'enabled' => $enabled,
         'sort' => $newSort,
         'bg' => $config['screen']['background'] ?? '#ffffff',
+        'refreshSeconds' => $refreshSeconds,
+        'timeout' => $timeout,
     ], count($slides), $config);
 
     playlist_save_normalized($slides);
