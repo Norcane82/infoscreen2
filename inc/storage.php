@@ -44,12 +44,15 @@ function save_config(array $config): bool
 function load_playlist(): array
 {
     $playlist = read_json_file(PLAYLIST_FILE, playlist_defaults());
+
     if (!isset($playlist['slides']) || !is_array($playlist['slides'])) {
         $playlist['slides'] = [];
     }
+
     if (!isset($playlist['version'])) {
         $playlist['version'] = 2;
     }
+
     return $playlist;
 }
 
@@ -58,5 +61,6 @@ function save_playlist(array $playlist): bool
     $base = playlist_defaults();
     $base['version'] = $playlist['version'] ?? 2;
     $base['slides'] = array_values($playlist['slides'] ?? []);
+
     return write_json_file(PLAYLIST_FILE, $base);
 }
