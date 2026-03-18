@@ -2,9 +2,10 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/playlist.php';
 
 $config = load_config();
-$playlist = load_playlist();
+$playlist = playlist_load_normalized();
 
 $slides = array_values(array_filter(
     $playlist['slides'] ?? [],
