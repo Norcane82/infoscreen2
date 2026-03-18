@@ -1,7 +1,11 @@
-logs/*.log
-cache/*.lock
+data/backups/*
+data/logs/*
+tmp/*
+cache/*
+logs/*
 data/restart_log.json
-uploads/*
-!uploads/.gitkeep
-
-data/backups/
+index.php.bak_*
+!data/backups/.gitkeep
+!data/logs/.gitkeep
+!tmp/.gitkeep
+!.gitignore
