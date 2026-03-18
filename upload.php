@@ -54,6 +54,28 @@ function upload_target_for_type(string $type): ?array
     };
 }
 
+function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $outputBase): array
+{
+    ensure_dir($outputDir);
+
+    $prefix = rtrim($outputDir, '/') . '/' . $outputBase;
+    $cmd = 'pdftoppm -png ' . escapeshellarg($pdfFile) . ' ' . escapeshellarg($prefix) . ' 2>&1';
+
+    exec($cmd, $output, $code);
+
+    if ($code !== 0) {
+        return [];
+    }
+
+    $files = glob($prefix . '-*.png');
+    if ($files === false) {
+        return [];
+    }
+
+    natsort($files);
+    return array_values($files);
+}
+
 if ($type === 'website') {
     $url = trim((string)($_POST['url'] ?? ''));
 
@@ -119,6 +141,48 @@ if (!move_uploaded_file((string)$_FILES['mediaFile']['tmp_name'], $target)) {
 }
 
 @chmod($target, 0664);
+
+if ($type === 'pdf') {
+    $renderDir = UPLOAD_DIR . '/pdf_rendered';
+    $renderPrefix = $base . '_' . date('Ymd_His');
+    $renderedFiles = render_pdf_pages_to_png($target, $renderDir, $renderPrefix);
+
+    if ($renderedFiles === []) {
+        redirect_admin();
+    }
+
+    $sort = $newSort;
+    $page = 1;
+
+    foreach ($renderedFiles as $renderedFile) {
+        @chmod($renderedFile, 0664);
+
+        $renderedName = basename($renderedFile);
+        $pageTitle = $title !== '' ? ($title . ' - Seite ' . $page) : ($base . ' - Seite ' . $page);
+
+        $slides[] = playlist_normalize_slide([
+            'id' => uuid_like('pdfimg'),
+            'type' => 'image',
+            'title' => $pageTitle,
+            'file' => 'uploads/pdf_rendered/' . $renderedName,
+            'duration' => $duration,
+            'enabled' => $enabled,
+            'sort' => $sort,
+            'bg' => $config['screen']['background'] ?? '#ffffff',
+            'fit' => $config['screen']['fit'] ?? 'contain',
+            'sourceType' => 'pdf',
+            'sourceFile' => $targetInfo['webPrefix'] . $fileName,
+            'sourceTitle' => $title !== '' ? $title : $base,
+            'page' => $page,
+        ], count($slides), $config);
+
+        $sort += 10;
+        $page++;
+    }
+
+    playlist_save_normalized($slides);
+    redirect_admin();
+}
 
 $item = [
     'id' => uuid_like($type),
