@@ -267,4 +267,3 @@ setInterval(refreshLiveStatus, 10000);
 
 </body>
 </html>
-pi@anthias-pi:/var/www/html/infoscreen2 $
