@@ -1,95 +1,142 @@
 <?php
-require_once __DIR__ . '/functions.php';
+declare(strict_types=1);
 
-$config = loadConfig();
-$playlist = loadPlaylist();
+require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/playlist.php';
 
-$type = $_POST['type'] ?? '';
+$config = load_config();
+$playlistData = playlist_load_normalized();
+$slides = $playlistData['slides'] ?? [];
+
+$type = strtolower(trim((string)($_POST['type'] ?? '')));
 $title = trim((string)($_POST['title'] ?? ''));
-$duration = max(1, (int)($_POST['duration'] ?? ($config['player']['defaultDuration'] ?? 8)));
+$duration = max(1, (int)($_POST['duration'] ?? ($config['screen']['defaultDuration'] ?? 8)));
 $enabled = !empty($_POST['enabled']);
 
 $maxSort = 0;
-foreach ($playlist as $item) {
+foreach ($slides as $item) {
     $maxSort = max($maxSort, (int)($item['sort'] ?? 0));
 }
 $newSort = $maxSort + 10;
 
-if ($type === 'website') {
-    $url = trim((string)($_POST['url'] ?? ''));
-    if ($url !== '') {
-        $playlist[] = normalizeSlide([
-            'id' => generateId('website'),
-            'type' => 'website',
-            'title' => $title !== '' ? $title : $url,
-            'url' => $url,
-            'duration' => $duration,
-            'refreshSeconds' => max(0, (int)($_POST['refreshSeconds'] ?? 0)),
-            'enabled' => $enabled,
-            'sort' => $newSort
-        ], $config);
-    }
-    savePlaylist($playlist);
+function redirect_admin(): void
+{
     header('Location: admin.php');
     exit;
+}
+
+function sanitize_upload_basename(string $name, string $fallback): string
+{
+    $base = preg_replace('/[^a-zA-Z0-9_-]+/', '_', pathinfo($name, PATHINFO_FILENAME));
+    $base = trim((string)$base, '_');
+    return $base !== '' ? $base : $fallback;
+}
+
+function upload_target_for_type(string $type): ?array
+{
+    return match ($type) {
+        'image' => [
+            'dir' => UPLOAD_DIR . '/images',
+            'webPrefix' => 'uploads/images/',
+            'extensions' => ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        ],
+        'video' => [
+            'dir' => UPLOAD_DIR . '/videos',
+            'webPrefix' => 'uploads/videos/',
+            'extensions' => ['mp4', 'webm', 'mov'],
+        ],
+        'pdf' => [
+            'dir' => UPLOAD_DIR . '/pdf',
+            'webPrefix' => 'uploads/pdf/',
+            'extensions' => ['pdf'],
+        ],
+        default => null,
+    };
+}
+
+if ($type === 'website') {
+    $url = trim((string)($_POST['url'] ?? ''));
+
+    if ($url === '') {
+        redirect_admin();
+    }
+
+    $slides[] = playlist_normalize_slide([
+        'id' => uuid_like('website'),
+        'type' => 'website',
+        'title' => $title !== '' ? $title : $url,
+        'url' => $url,
+        'duration' => $duration,
+        'enabled' => $enabled,
+        'sort' => $newSort,
+        'bg' => $config['screen']['background'] ?? '#ffffff',
+    ], count($slides), $config);
+
+    playlist_save_normalized($slides);
+    redirect_admin();
 }
 
 if (empty($_FILES['mediaFile']['name']) || !is_uploaded_file($_FILES['mediaFile']['tmp_name'])) {
-    header('Location: admin.php');
-    exit;
+    redirect_admin();
 }
 
-$ext = strtolower(pathinfo($_FILES['mediaFile']['name'], PATHINFO_EXTENSION));
+$originalName = (string)$_FILES['mediaFile']['name'];
+$ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
 $imageExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 $videoExt = ['mp4', 'webm', 'mov'];
+$pdfExt = ['pdf'];
 
-if ($type !== 'image' && $type !== 'video') {
+if (!in_array($type, ['image', 'video', 'pdf'], true)) {
     if (in_array($ext, $imageExt, true)) {
         $type = 'image';
     } elseif (in_array($ext, $videoExt, true)) {
         $type = 'video';
+    } elseif (in_array($ext, $pdfExt, true)) {
+        $type = 'pdf';
     } else {
-        header('Location: admin.php');
-        exit;
+        redirect_admin();
     }
 }
 
-$allowed = $type === 'video' ? $videoExt : $imageExt;
-if (!in_array($ext, $allowed, true)) {
-    header('Location: admin.php');
-    exit;
-}
-$base = preg_replace('/[^a-zA-Z0-9_-]+/', '_', pathinfo($_FILES['mediaFile']['name'], PATHINFO_FILENAME));
-$base = trim((string)$base, '_');
-if ($base === '') {
-    $base = $type;
+$targetInfo = upload_target_for_type($type);
+if ($targetInfo === null) {
+    redirect_admin();
 }
 
+if (!in_array($ext, $targetInfo['extensions'], true)) {
+    redirect_admin();
+}
+
+ensure_dir($targetInfo['dir']);
+
+$base = sanitize_upload_basename($originalName, $type);
 $fileName = $base . '_' . date('Ymd_His') . '.' . $ext;
-$target = __DIR__ . '/uploads/' . $fileName;
+$target = $targetInfo['dir'] . '/' . $fileName;
 
-if (!move_uploaded_file($_FILES['mediaFile']['tmp_name'], $target)) {
-    header('Location: admin.php');
-    exit;
+if (!move_uploaded_file((string)$_FILES['mediaFile']['tmp_name'], $target)) {
+    redirect_admin();
 }
 
 @chmod($target, 0664);
 
 $item = [
-    'id' => generateId($type),
+    'id' => uuid_like($type),
     'type' => $type,
     'title' => $title !== '' ? $title : $base,
-    'file' => $fileName,
+    'file' => $targetInfo['webPrefix'] . $fileName,
     'duration' => $duration,
     'enabled' => $enabled,
-    'sort' => $newSort
+    'sort' => $newSort,
+    'bg' => $config['screen']['background'] ?? '#ffffff',
+    'fit' => $config['screen']['fit'] ?? 'contain',
 ];
 
 if ($type === 'video') {
     $item['muted'] = !empty($_POST['muted']);
 }
-$playlist[] = normalizeSlide($item, $config);
-savePlaylist($playlist);
 
-header('Location: admin.php');
-exit;
+$slides[] = playlist_normalize_slide($item, count($slides), $config);
+playlist_save_normalized($slides);
+
+redirect_admin();
