@@ -4,6 +4,45 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/playlist.php';
 
+function redirect_admin_delete(): void
+{
+    header('Location: admin.php');
+    exit;
+}
+
+function web_path_to_full_path(string $path): ?string
+{
+    $path = trim($path);
+
+    if ($path === '' || !str_starts_with($path, 'uploads/')) {
+        return null;
+    }
+
+    return __DIR__ . '/' . $path;
+}
+
+function delete_file_if_exists(string $path): void
+{
+    $fullPath = web_path_to_full_path($path);
+    if ($fullPath === null) {
+        return;
+    }
+
+    if (is_file($fullPath)) {
+        @unlink($fullPath);
+    }
+}
+
+function rendered_prefix_from_source_file(string $sourceFile): ?string
+{
+    $baseName = pathinfo($sourceFile, PATHINFO_FILENAME);
+    if ($baseName === '') {
+        return null;
+    }
+
+    return $baseName;
+}
+
 $id = trim((string)($_POST['id'] ?? ''));
 $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
@@ -18,20 +57,22 @@ foreach ($slides as $item) {
 }
 
 if ($targetSlide === null) {
-    header('Location: admin.php');
-    exit;
+    redirect_admin_delete();
 }
 
 $isPdfRenderedImage = (($targetSlide['type'] ?? '') === 'image') && (($targetSlide['sourceType'] ?? '') === 'pdf');
-$pdfSourceFile = $isPdfRenderedImage ? (string)($targetSlide['sourceFile'] ?? '') : '';
-$pdfRenderedFiles = [];
-$pdfOriginalFile = '';
 
 if ($isPdfRenderedImage) {
-    $pdfOriginalFile = $pdfSourceFile;
+    $pdfSourceFile = (string)($targetSlide['sourceFile'] ?? '');
+    $pdfRenderedFiles = [];
 
     foreach ($slides as $item) {
-        if ((($item['type'] ?? '') === 'image') && (($item['sourceType'] ?? '') === 'pdf') && ((string)($item['sourceFile'] ?? '') === $pdfSourceFile)) {
+        $samePdfGroup =
+            (($item['type'] ?? '') === 'image') &&
+            (($item['sourceType'] ?? '') === 'pdf') &&
+            ((string)($item['sourceFile'] ?? '') === $pdfSourceFile);
+
+        if ($samePdfGroup) {
             $file = (string)($item['file'] ?? '');
             if ($file !== '') {
                 $pdfRenderedFiles[] = $file;
@@ -41,40 +82,33 @@ if ($isPdfRenderedImage) {
 
         $newSlides[] = $item;
     }
+
+    foreach ($pdfRenderedFiles as $file) {
+        delete_file_if_exists($file);
+    }
+
+    delete_file_if_exists($pdfSourceFile);
+
+    $renderedPrefix = rendered_prefix_from_source_file($pdfSourceFile);
+    if ($renderedPrefix !== null) {
+        $matches = glob(__DIR__ . '/uploads/pdf_rendered/' . $renderedPrefix . '-*.png');
+        if (is_array($matches)) {
+            foreach ($matches as $match) {
+                if (is_file($match)) {
+                    @unlink($match);
+                }
+            }
+        }
+    }
 } else {
     foreach ($slides as $item) {
         if ((string)($item['id'] ?? '') === $id) {
             $file = (string)($item['file'] ?? '');
-
-            if ($file !== '' && str_starts_with($file, 'uploads/')) {
-                $fullPath = __DIR__ . '/' . $file;
-                if (is_file($fullPath)) {
-                    @unlink($fullPath);
-                }
-            }
-
+            delete_file_if_exists($file);
             continue;
         }
 
         $newSlides[] = $item;
-    }
-}
-
-if ($isPdfRenderedImage) {
-    foreach ($pdfRenderedFiles as $file) {
-        if ($file !== '' && str_starts_with($file, 'uploads/')) {
-            $fullPath = __DIR__ . '/' . $file;
-            if (is_file($fullPath)) {
-                @unlink($fullPath);
-            }
-        }
-    }
-
-    if ($pdfOriginalFile !== '' && str_starts_with($pdfOriginalFile, 'uploads/')) {
-        $fullPath = __DIR__ . '/' . $pdfOriginalFile;
-        if (is_file($fullPath)) {
-            @unlink($fullPath);
-        }
     }
 }
 
@@ -85,5 +119,4 @@ unset($item);
 
 playlist_save_normalized($newSlides);
 
-header('Location: admin.php');
-exit;
+redirect_admin_delete();
