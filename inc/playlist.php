@@ -41,7 +41,21 @@ function playlist_normalize_slide(array $slide, int $index = 0, array $config = 
     if ($type === 'clock') {
         $normalized['clock'] = is_array($slide['clock'] ?? null) ? $slide['clock'] : [];
     }
+if (isset($slide['sourceType'])) {
+    $normalized['sourceType'] = (string)$slide['sourceType'];
+}
 
+if (isset($slide['sourceFile'])) {
+    $normalized['sourceFile'] = (string)$slide['sourceFile'];
+}
+
+if (isset($slide['sourceTitle'])) {
+    $normalized['sourceTitle'] = (string)$slide['sourceTitle'];
+}
+
+if (isset($slide['page'])) {
+    $normalized['page'] = (int)$slide['page'];
+}
     return $normalized;
 }
 
