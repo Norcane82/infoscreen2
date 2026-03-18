@@ -22,8 +22,14 @@ if (is_file($fallbackFile)) {
     $fallbackText = trim((string)file_get_contents($fallbackFile));
 }
 
-function typeLabel(string $type): string
+function slideTypeLabel(array $item): string
 {
+    $type = strtolower((string)($item['type'] ?? ''));
+
+    if ($type === 'image' && (($item['sourceType'] ?? '') === 'pdf')) {
+        return 'PDF-Seite';
+    }
+
     $map = [
         'clock' => 'Uhr',
         'image' => 'Bild',
@@ -148,6 +154,7 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
       <div><label>Aktiviert</label><select name="enabled"><option value="1" selected>Ja</option><option value="0">Nein</option></select></div>
       <div><label>Bei Video: stumm</label><select name="muted"><option value="1" selected>Ja</option><option value="0">Nein</option></select></div>
     </div>
+    <p class="small" style="margin-top:10px">PDF-Dateien werden beim Upload automatisch in Bildseiten umgewandelt.</p>
     <p style="margin-top:16px"><button type="submit">Datei hochladen</button></p>
   </form>
 </div>
@@ -176,7 +183,7 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
     <tr>
       <td><?= (int)($item['sort'] ?? 0) ?></td>
       <td><?= h($item['title'] ?? '-') ?></td>
-      <td><span class="badge"><?= h(typeLabel($item['type'] ?? '')) ?></span></td>
+      <td><span class="badge"><?= h(slideTypeLabel($item)) ?></span></td>
       <td><?php if (!empty($item['enabled'])): ?><span class="badge ok">aktiv</span><?php else: ?><span class="badge off">inaktiv</span><?php endif; ?></td>
       <td>
         <?php if (($item['type'] ?? '') === 'website'): ?>
@@ -184,7 +191,13 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
         <?php else: ?>
           <code><?= h($item['file'] ?? '') ?></code>
         <?php endif; ?>
+
         <div class="small">Dauer: <?= (int)($item['duration'] ?? 0) ?>s</div>
+
+        <?php if ((($item['type'] ?? '') === 'image') && (($item['sourceType'] ?? '') === 'pdf')): ?>
+          <div class="small">Quelle: <?= h($item['sourceTitle'] ?? 'PDF') ?></div>
+          <div class="small">Seite: <?= (int)($item['page'] ?? 0) ?></div>
+        <?php endif; ?>
       </td>
       <td>
         <div class="actions">
