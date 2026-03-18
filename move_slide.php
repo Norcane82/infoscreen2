@@ -1,14 +1,18 @@
 <?php
-require_once __DIR__ . '/functions.php';
+declare(strict_types=1);
 
-$id = (string)($_POST['id'] ?? '');
-$dir = (string)($_POST['dir'] ?? '');
-$config = loadConfig();
-$playlist = normalizePlaylist(loadPlaylist(), $config);
+require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/playlist.php';
+
+$id = trim((string)($_POST['id'] ?? ''));
+$dir = trim((string)($_POST['dir'] ?? ''));
+
+$playlistData = playlist_load_normalized();
+$slides = array_values($playlistData['slides'] ?? []);
 
 $index = null;
-foreach ($playlist as $i => $item) {
-    if (($item['id'] ?? '') === $id) {
+foreach ($slides as $i => $item) {
+    if ((string)($item['id'] ?? '') === $id) {
         $index = $i;
         break;
     }
@@ -16,22 +20,23 @@ foreach ($playlist as $i => $item) {
 
 if ($index !== null) {
     if ($dir === 'up' && $index > 0) {
-        $tmp = $playlist[$index - 1];
-        $playlist[$index - 1] = $playlist[$index];
-        $playlist[$index] = $tmp;
-    }
-    if ($dir === 'down' && $index < count($playlist) - 1) {
-        $tmp = $playlist[$index + 1];
-        $playlist[$index + 1] = $playlist[$index];
-        $playlist[$index] = $tmp;
+        $tmp = $slides[$index - 1];
+        $slides[$index - 1] = $slides[$index];
+        $slides[$index] = $tmp;
     }
 
-    foreach ($playlist as $i => &$item) {
+    if ($dir === 'down' && $index < count($slides) - 1) {
+        $tmp = $slides[$index + 1];
+        $slides[$index + 1] = $slides[$index];
+        $slides[$index] = $tmp;
+    }
+
+    foreach ($slides as $i => &$item) {
         $item['sort'] = ($i + 1) * 10;
     }
     unset($item);
 
-    savePlaylist($playlist);
+    playlist_save_normalized($slides);
 }
 
 header('Location: admin.php');
