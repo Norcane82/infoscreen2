@@ -11,9 +11,15 @@
     const defaultFade = Number(screenConfig.defaultFade || 1);
     const defaultFit = screenConfig.fit || 'contain';
     const defaultBackground = screenConfig.background || '#ffffff';
+
     const clockEnabled = clockConfig.enabled !== false;
     const clockTimezone = clockConfig.timezone || 'Europe/Vienna';
     const defaultClockDuration = Number(clockConfig.defaultDuration || 10);
+    const clockBackground = clockConfig.background || '#ffffff';
+    const clockTextColor = clockConfig.textColor || '#111111';
+    const clockShowSeconds = clockConfig.showSeconds === true;
+    const clockLogo = clockConfig.logo || '';
+    const clockLogoHeight = Number(clockConfig.logoHeight || 100);
 
     let currentIndex = -1;
     let currentNode = null;
@@ -137,8 +143,10 @@
         const { wrapper, inner } = makeBaseSlide(slide);
 
         inner.classList.add('clock-slide');
+        inner.style.background = clockBackground;
+        inner.style.color = clockTextColor;
 
-        const logoPath = slide.clock?.logo || '';
+        const logoPath = slide.clock?.logo || clockLogo || '';
         const showLogo = slide.clock?.showLogo === true && !!logoPath;
 
         if (showLogo) {
@@ -146,6 +154,9 @@
             logo.src = logoPath;
             logo.alt = 'Logo';
             logo.className = 'clock-logo';
+            logo.style.height = `${clockLogoHeight}px`;
+            logo.style.maxHeight = `${clockLogoHeight}px`;
+            logo.style.width = 'auto';
             inner.appendChild(logo);
         }
 
@@ -197,12 +208,17 @@
 
         const now = new Date();
 
-        const timeText = new Intl.DateTimeFormat('de-AT', {
+        const timeOptions = {
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
             timeZone: clockTimezone
-        }).format(now);
+        };
+
+        if (clockShowSeconds) {
+            timeOptions.second = '2-digit';
+        }
+
+        const timeText = new Intl.DateTimeFormat('de-AT', timeOptions).format(now);
 
         const dateText = new Intl.DateTimeFormat('de-AT', {
             weekday: 'long',
