@@ -1,119 +1,131 @@
-pi@anthias-pi:/var/www/html/infoscreen2 $ cd /var/www/html/infoscreen2 && \
-sed -n '1,260p' inc/storage.php && \
-printf '\n--- BOOTSTRAP ---\n' && \
-sed -n '1,260p' inc/bootstrap.php
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/inc/playlist.php';
 
-function read_json_file(string $file, array $fallback = []): array
+function redirect_admin_cleanup(): void
 {
-    if (!file_exists($file)) {
-        return $fallback;
-    }
-
-    $raw = file_get_contents($file);
-    if ($raw === false || trim($raw) === '') {
-        return $fallback;
-    }
-
-    $decoded = json_decode($raw, true);
-    return is_array($decoded) ? $decoded : $fallback;
+    header('Location: admin.php');
+    exit;
 }
 
-function write_json_file(string $file, array $data): bool
+function normalize_relative_upload_path(string $path): ?string
 {
-    ensure_dir(dirname($file));
-    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false) {
-        return false;
+    $path = trim(str_replace('\\', '/', $path));
+
+    if ($path === '' || !str_starts_with($path, 'uploads/')) {
+        return null;
     }
 
-    return file_put_contents($file, $json . PHP_EOL, LOCK_EX) !== false;
+    return $path;
 }
 
-function load_config(): array
+function collect_referenced_files(array $config, array $slides): array
 {
-    return array_replace_recursive(app_defaults(), read_json_file(CONFIG_FILE, []));
+    $referenced = [];
+
+    $add = static function ($path) use (&$referenced): void {
+        if (!is_string($path)) {
+            return;
+        }
+
+        $normalized = normalize_relative_upload_path($path);
+        if ($normalized === null) {
+            return;
+        }
+
+        $referenced[$normalized] = true;
+    };
+
+    $add($config['clock']['logo'] ?? null);
+
+    foreach ($slides as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+
+        $add($slide['file'] ?? null);
+        $add($slide['sourceFile'] ?? null);
+
+        if (($slide['type'] ?? '') === 'clock' && isset($slide['clock']) && is_array($slide['clock'])) {
+            $add($slide['clock']['logo'] ?? null);
+        }
+    }
+
+    return $referenced;
 }
 
-function save_config(array $config): bool
+function collect_candidate_files(array $directories): array
 {
-    $defaults = app_defaults();
+    $files = [];
 
-    $clean = [
-        'screen' => [],
-        'clock' => [],
-        'system' => [],
-    ];
+    foreach ($directories as $dir) {
+        $fullDir = __DIR__ . '/' . $dir;
+        if (!is_dir($fullDir)) {
+            continue;
+        }
 
-    foreach ($defaults['screen'] as $key => $value) {
-        $clean['screen'][$key] = $config['screen'][$key] ?? $value;
+        $entries = scandir($fullDir);
+        if ($entries === false) {
+            continue;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry === '.gitkeep') {
+                continue;
+            }
+
+            $relativePath = $dir . '/' . $entry;
+            $fullPath = __DIR__ . '/' . $relativePath;
+
+            if (is_file($fullPath)) {
+                $files[] = str_replace('\\', '/', $relativePath);
+            }
+        }
     }
 
-    foreach ($defaults['clock'] as $key => $value) {
-        $clean['clock'][$key] = $config['clock'][$key] ?? $value;
-    }
-
-    foreach ($defaults['system'] as $key => $value) {
-        $clean['system'][$key] = $config['system'][$key] ?? $value;
-    }
-
-    if (isset($config['services']) && is_array($config['services'])) {
-        $clean['services'] = $config['services'];
-    }
-
-    return write_json_file(CONFIG_FILE, $clean);
+    sort($files);
+    return $files;
 }
 
-function load_playlist(): array
-{
-    $playlist = read_json_file(PLAYLIST_FILE, playlist_defaults());
+$config = load_config();
+$playlistData = playlist_load_normalized();
+$slides = $playlistData['slides'] ?? [];
 
-    if (!isset($playlist['slides']) || !is_array($playlist['slides'])) {
-        $playlist['slides'] = [];
+$referencedFiles = collect_referenced_files($config, $slides);
+
+$candidateDirectories = [
+    'uploads',
+    'uploads/images',
+    'uploads/videos',
+    'uploads/pdf',
+    'uploads/pdf_rendered',
+    'uploads/websites',
+    'uploads/clock',
+];
+
+$candidateFiles = collect_candidate_files($candidateDirectories);
+
+$deletedFiles = [];
+$keptFiles = [];
+
+foreach ($candidateFiles as $relativePath) {
+    if (isset($referencedFiles[$relativePath])) {
+        $keptFiles[] = $relativePath;
+        continue;
     }
 
-    if (!isset($playlist['version'])) {
-        $playlist['version'] = 2;
+    $fullPath = __DIR__ . '/' . $relativePath;
+    if (is_file($fullPath) && @unlink($fullPath)) {
+        $deletedFiles[] = $relativePath;
     }
-
-    return $playlist;
 }
 
-function save_playlist(array $playlist): bool
-{
-    $base = playlist_defaults();
-    $base['version'] = $playlist['version'] ?? 2;
-    $base['slides'] = array_values($playlist['slides'] ?? []);
+log_message('INFO', 'Orphan cleanup finished', [
+    'deleted_count' => count($deletedFiles),
+    'kept_count' => count($keptFiles),
+    'deleted_files' => $deletedFiles,
+]);
 
-    return write_json_file(PLAYLIST_FILE, $base);
-}
-
---- BOOTSTRAP ---
-<?php
-declare(strict_types=1);
-
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/storage.php';
-require_once __DIR__ . '/logger.php';
-
-date_default_timezone_set('Europe/Vienna');
-
-ensure_dir(DATA_DIR);
-ensure_dir(UPLOAD_DIR);
-ensure_dir(TMP_DIR);
-ensure_dir(DATA_DIR . '/logs');
-ensure_dir(DATA_DIR . '/backups');
-
-if (!file_exists(CONFIG_FILE)) {
-    save_config(app_defaults());
-}
-
-if (!file_exists(PLAYLIST_FILE)) {
-    save_playlist(playlist_defaults());
-}
-pi@anthias-pi:/var/www/html/infoscreen2 $
+redirect_admin_cleanup();
