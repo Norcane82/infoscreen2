@@ -10,6 +10,58 @@ $id = trim((string)($_POST['id'] ?? ''));
 $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
 
+$targetSlide = null;
+foreach ($slides as $item) {
+    if ((string)($item['id'] ?? '') === $id) {
+        $targetSlide = $item;
+        break;
+    }
+}
+
+if ($targetSlide === null) {
+    header('Location: admin.php');
+    exit;
+}
+
+$isPdfRenderedImage =
+    (($targetSlide['type'] ?? '') === 'image') &&
+    (($targetSlide['sourceType'] ?? '') === 'pdf');
+
+if ($isPdfRenderedImage) {
+    $groupSourceFile = (string)($targetSlide['sourceFile'] ?? '');
+    $groupSourceTitle = trim((string)($_POST['title'] ?? ($targetSlide['sourceTitle'] ?? $targetSlide['title'] ?? '')));
+    $enabled = !empty($_POST['enabled']);
+    $duration = max(1, (int)($_POST['duration'] ?? ($targetSlide['duration'] ?? 8)));
+    $fit = (string)($_POST['fit'] ?? ($targetSlide['fit'] ?? 'contain'));
+    $fit = in_array($fit, ['contain', 'cover'], true) ? $fit : 'contain';
+    $fade = max(0, (float)($_POST['fade'] ?? ($targetSlide['fade'] ?? ($config['screen']['defaultFade'] ?? 1))));
+
+    foreach ($slides as &$item) {
+        $samePdfGroup =
+            (($item['type'] ?? '') === 'image') &&
+            (($item['sourceType'] ?? '') === 'pdf') &&
+            ((string)($item['sourceFile'] ?? '') === $groupSourceFile);
+
+        if (!$samePdfGroup) {
+            continue;
+        }
+
+        $page = (int)($item['page'] ?? 0);
+        $item['sourceTitle'] = $groupSourceTitle;
+        $item['title'] = $groupSourceTitle . ' - Seite ' . $page;
+        $item['enabled'] = $enabled;
+        $item['duration'] = $duration;
+        $item['fit'] = $fit;
+        $item['fade'] = $fade;
+    }
+    unset($item);
+
+    playlist_save_normalized($slides);
+
+    header('Location: admin.php');
+    exit;
+}
+
 foreach ($slides as &$item) {
     if ((string)($item['id'] ?? '') !== $id) {
         continue;
