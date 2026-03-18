@@ -38,6 +38,11 @@ function playlist_normalize_slide(array $slide, int $index = 0, array $config = 
         $normalized['url'] = (string)$slide['url'];
     }
 
+    if ($type === 'website') {
+        $normalized['refreshSeconds'] = isset($slide['refreshSeconds']) ? max(0, (int)$slide['refreshSeconds']) : 0;
+        $normalized['timeout'] = isset($slide['timeout']) ? max(1, (int)$slide['timeout']) : 8;
+    }
+
     if ($type === 'clock') {
         $normalized['clock'] = is_array($slide['clock'] ?? null) ? $slide['clock'] : [];
     }
