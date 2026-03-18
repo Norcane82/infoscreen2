@@ -88,6 +88,7 @@ foreach ($slides as &$item) {
     if ($type === 'website') {
         $item['url'] = trim((string)($_POST['url'] ?? ($item['url'] ?? '')));
         $item['refreshSeconds'] = max(0, (int)($_POST['refreshSeconds'] ?? ($item['refreshSeconds'] ?? 0)));
+        $item['timeout'] = max(1, (int)($_POST['timeout'] ?? ($item['timeout'] ?? 8)));
     }
 
     if ($type === 'clock') {
