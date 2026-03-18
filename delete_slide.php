@@ -15,7 +15,6 @@ foreach ($slides as $item) {
 
         if ($file !== '' && str_starts_with($file, 'uploads/')) {
             $fullPath = __DIR__ . '/' . $file;
-
             if (is_file($fullPath)) {
                 @unlink($fullPath);
             }
