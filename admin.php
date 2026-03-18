@@ -88,6 +88,7 @@ code{background:#f0f0f0;padding:2px 6px;border-radius:6px}
     <form action="player_action.php" method="post"><input type="hidden" name="action" value="fallback_off"><button class="btn" type="submit">Fallback deaktivieren</button></form>
     <form action="run_watchdog.php" method="post"><button class="btn" type="submit">Watchdog jetzt ausführen</button></form>
     <form action="backup.php" method="post"><button class="btn" type="submit">Backup erstellen</button></form>
+    <form action="cleanup_orphans.php" method="post" onsubmit="return confirm('Verwaiste Upload-Dateien wirklich löschen?');"><button class="btn" type="submit">Verwaiste Dateien aufräumen</button></form>
   </div>
 </div>
 
@@ -266,3 +267,4 @@ setInterval(refreshLiveStatus, 10000);
 
 </body>
 </html>
+pi@anthias-pi:/var/www/html/infoscreen2 $
