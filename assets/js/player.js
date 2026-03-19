@@ -347,10 +347,9 @@
         currentIndex = (currentIndex + 1) % enabledSlides.length;
         const slide = enabledSlides[currentIndex];
 
-        if (!hasStartedPlayback) {
+        if (currentIndex === 0 && !activeLayer.classList.contains('is-active')) {
             renderSlideIntoLayer(activeLayer, slide);
             activeLayer.classList.add('is-active');
-            hasStartedPlayback = true;
             trace('Initial slide shown');
             scheduleNextSlide(slide);
             return;
@@ -367,6 +366,7 @@
         }
 
         trace('Player start');
+        currentIndex = -1;
         nextSlide();
     }
 
