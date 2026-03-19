@@ -66,11 +66,6 @@ body {
     z-index: 3;
 }
 
-.slide-layer.is-leaving {
-    opacity: 0;
-    z-index: 2;
-}
-
 .slide-layer__content {
     position: absolute;
     inset: 0;
@@ -113,7 +108,7 @@ body {
     object-fit: contain;
 }
 
-/* Root-Overlay bleibt nur für Reserve/Diagnose im DOM, aber unsichtbar */
+/* Root-Overlay bleibt nur für Reserve/Diagnose, im Normalbetrieb unsichtbar */
 .transition-overlay-root {
     position: fixed;
     inset: 0;
@@ -247,9 +242,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
     .slide-layer,
-    .slide-layer.is-active,
-    .slide-layer.is-next,
-    .slide-layer.is-leaving,
     .transition-overlay-root,
     .transition-overlay-root.is-visible,
     .transition-overlay-root.is-hold,
