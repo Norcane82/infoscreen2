@@ -113,7 +113,7 @@ body {
     object-fit: contain;
 }
 
-/* Root-Overlay bleibt im DOM, ist im Normalbetrieb aber unsichtbar/deaktiviert */
+/* Root-Overlay bleibt nur als Reserve im DOM, aber ohne sichtbaren Effekt */
 .transition-overlay-root {
     position: fixed;
     inset: 0;
