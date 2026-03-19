@@ -180,7 +180,6 @@
         }
 
         rootOverlay.classList.toggle('is-visible', !!visible);
-        trace(visible ? 'Overlay visible ON (disabled mode)' : 'Overlay visible OFF (disabled mode)');
     }
 
     function buildClockSlide(layer) {
@@ -333,7 +332,7 @@
 
             trace('Crossfade transition complete');
             scheduleNextSlide(nextSlideData);
-        }, fadeMs + 60);
+        }, fadeMs + 80);
     }
 
     function performTransition(nextSlideData) {
@@ -349,13 +348,10 @@
 
         renderSlideIntoLayer(nextLayer, nextSlideData);
 
-        oldLayer.classList.remove('is-next');
-        oldLayer.classList.remove('is-leaving');
+        oldLayer.classList.remove('is-next', 'is-leaving');
         oldLayer.classList.add('is-active');
 
-        nextLayer.classList.remove('is-active');
-        nextLayer.classList.remove('is-leaving');
-        nextLayer.classList.remove('is-next');
+        nextLayer.classList.remove('is-active', 'is-next', 'is-leaving');
 
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
