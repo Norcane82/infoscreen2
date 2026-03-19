@@ -451,16 +451,6 @@
     node.classList.add('is-prepared');
     stage.appendChild(node);
 
-    // Force the browser to commit the initial opacity:0 state before activation.
-    void node.offsetWidth;
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        node.classList.add('active');
-        node.classList.remove('is-prepared');
-      });
-    });
-
     sendLog('INFO', 'Slide shown', {
       slideId: slide.id,
       type: slide.type,
@@ -495,25 +485,32 @@
     }
   }
 
-  function deactivateOldNode(oldNode, fadeSeconds) {
-    if (!oldNode) {
-      return;
-    }
+  function runTransition(oldNode, newNode, fadeSeconds) {
+    const fadeMs = Math.max(0, Number(fadeSeconds) || 0) * 1000;
 
-    clearNodeRuntime(oldNode);
-
-    oldNode.classList.remove('is-prepared');
-    oldNode.classList.remove('active');
-
-    // Force class change before leaving transition starts.
-    void oldNode.offsetWidth;
-
-    oldNode.classList.add('leaving');
-    oldNode.style.transition = `opacity ${Math.max(0, Number(fadeSeconds) || 0)}s ease`;
+    // Commit initial DOM state.
+    void stage.offsetWidth;
 
     window.setTimeout(() => {
-      oldNode.remove();
-    }, Math.max(350, Number(fadeSeconds || 0) * 1000 + 80));
+      if (oldNode) {
+        oldNode.classList.remove('is-prepared');
+        oldNode.classList.remove('active');
+        void oldNode.offsetWidth;
+        oldNode.classList.add('leaving');
+      }
+
+      // Let the browser see the old slide leaving before activating the new one.
+      window.setTimeout(() => {
+        newNode.classList.add('active');
+        newNode.classList.remove('is-prepared');
+      }, 34);
+    }, 34);
+
+    if (oldNode) {
+      window.setTimeout(() => {
+        oldNode.remove();
+      }, Math.max(400, fadeMs + 180));
+    }
   }
 
   function showSlide(index) {
@@ -531,7 +528,7 @@
     const oldNode = currentNode;
 
     activateNode(node, slide);
-    deactivateOldNode(oldNode, slide.fade);
+    runTransition(oldNode, node, slide.fade);
 
     currentNode = node;
     currentIndex = index;
