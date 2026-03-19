@@ -50,8 +50,8 @@ body {
     overflow: hidden;
     background: #000 center center / contain no-repeat;
     opacity: 0;
-    will-change: opacity, transform;
-    transform: translateZ(0);
+    z-index: 1;
+    will-change: opacity;
     backface-visibility: hidden;
 }
 
@@ -61,8 +61,16 @@ body {
 }
 
 .slide-layer.is-next {
-    opacity: 0;
+    opacity: 1;
     z-index: 3;
+}
+
+.slide-layer__content {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
 }
 
 .slide-layer iframe,
@@ -76,21 +84,52 @@ body {
     border: 0;
 }
 
-.slide-layer video {
-    object-fit: contain;
+.slide-layer video,
+.slide-layer img,
+.slide-layer iframe,
+.slide-layer object,
+.slide-layer embed {
     background: #000;
 }
 
+.slide-layer video,
 .slide-layer img {
     object-fit: contain;
-    background: #000;
 }
 
-/*
- * ROOT OVERLAY DIAGNOSTIC
- * Extrem hoch, fixed, direkt unter body.
- * Kein Filter, keine Transformations-Abhängigkeit.
- */
+.slide-layer--cover video,
+.slide-layer--cover img {
+    object-fit: cover;
+}
+
+.slide-layer--contain video,
+.slide-layer--contain img {
+    object-fit: contain;
+}
+
+/* echtes Root-Overlay */
+.transition-overlay-root {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483645;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    background: #000;
+    transition:
+        opacity 160ms linear,
+        visibility 0s linear 160ms;
+}
+
+.transition-overlay-root.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 160ms linear,
+        visibility 0s linear 0s;
+}
+
+/* optionale Diagnoseebene */
 .root-overlay-diagnostic {
     position: fixed;
     inset: 0;
@@ -101,7 +140,6 @@ body {
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    transform: none;
     transition:
         opacity 160ms linear,
         visibility 0s linear 160ms;
@@ -159,7 +197,50 @@ body {
     color: rgba(255, 255, 255, 0.92);
 }
 
+.slide-clock {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+.slide-clock__inner {
+    text-align: center;
+    padding: 2rem;
+}
+
+.slide-clock__time {
+    font-size: clamp(4rem, 12vw, 10rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.04em;
+}
+
+.slide-clock__date {
+    margin-top: 1rem;
+    font-size: clamp(1.2rem, 3vw, 2.2rem);
+    opacity: 0.85;
+}
+
+.slide-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4vw;
+    text-align: center;
+    background: #000;
+    color: #fff;
+    font-size: clamp(1.4rem, 3vw, 3rem);
+    font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .transition-overlay-root,
+    .transition-overlay-root.is-visible,
     .root-overlay-diagnostic,
     .root-overlay-diagnostic.is-visible,
     .slide-layer {
