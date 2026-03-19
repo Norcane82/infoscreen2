@@ -47,17 +47,33 @@ $entry = [
     'context' => $context,
 ];
 
-$line = json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-if ($line === false) {
+$jsonLine = json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+if ($jsonLine === false) {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'encode_failed']);
     exit;
 }
 
-$logFile = __DIR__ . '/data/logs/app.log';
-$result = @file_put_contents($logFile, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+$logDir = __DIR__ . '/data/logs';
+if (!is_dir($logDir)) {
+    @mkdir($logDir, 0775, true);
+}
 
-if ($result === false) {
+$appLogFile = $logDir . '/app.log';
+$traceLogFile = $logDir . '/player_trace.log';
+
+$appResult = @file_put_contents($appLogFile, $jsonLine . PHP_EOL, FILE_APPEND | LOCK_EX);
+
+$traceLine = sprintf(
+    "[%s] %-5s %s | %s\n",
+    date('Y-m-d H:i:s'),
+    $level,
+    $message,
+    json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+);
+@file_put_contents($traceLogFile, $traceLine, FILE_APPEND | LOCK_EX);
+
+if ($appResult === false) {
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'write_failed']);
     exit;
