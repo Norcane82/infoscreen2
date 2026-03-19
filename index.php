@@ -17,6 +17,7 @@ usort($slides, static function (array $a, array $b): int {
 
 $screen = $config['screen'] ?? [];
 $clock = $config['clock'] ?? [];
+$website = $config['website'] ?? [];
 
 $playerConfig = [
     'screen' => [
@@ -29,6 +30,14 @@ $playerConfig = [
         'enabled' => (bool)($clock['enabled'] ?? true),
         'defaultDuration' => (float)($clock['defaultDuration'] ?? 10),
         'timezone' => (string)($clock['timezone'] ?? 'Europe/Vienna'),
+        'background' => (string)($clock['background'] ?? '#ffffff'),
+        'textColor' => (string)($clock['textColor'] ?? '#111111'),
+        'showSeconds' => (bool)($clock['showSeconds'] ?? false),
+        'logo' => (string)($clock['logo'] ?? ''),
+        'logoHeight' => (int)($clock['logoHeight'] ?? 100),
+    ],
+    'website' => [
+        'timeout' => (float)($website['timeout'] ?? 8),
     ],
 ];
 
