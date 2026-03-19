@@ -126,7 +126,8 @@
   }
 
   function applyFade(node, seconds) {
-    node.style.transitionDuration = `${seconds}s, 0s`;
+    const fadeSeconds = Math.max(0, Number(seconds) || 0);
+    node.style.transition = `opacity ${fadeSeconds}s ease`;
   }
 
   function makeBaseSlide(slide) {
@@ -443,11 +444,20 @@
   }
 
   function activateNode(node, slide) {
+    if (!stage) {
+      return;
+    }
+
+    node.classList.add('is-prepared');
     stage.appendChild(node);
+
+    // Force the browser to commit the initial opacity:0 state before activation.
+    void node.offsetWidth;
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         node.classList.add('active');
+        node.classList.remove('is-prepared');
       });
     });
 
@@ -492,13 +502,18 @@
 
     clearNodeRuntime(oldNode);
 
+    oldNode.classList.remove('is-prepared');
     oldNode.classList.remove('active');
+
+    // Force class change before leaving transition starts.
+    void oldNode.offsetWidth;
+
     oldNode.classList.add('leaving');
-    oldNode.style.transitionDuration = `${fadeSeconds}s, 0s`;
+    oldNode.style.transition = `opacity ${Math.max(0, Number(fadeSeconds) || 0)}s ease`;
 
     window.setTimeout(() => {
       oldNode.remove();
-    }, Math.max(350, fadeSeconds * 1000 + 80));
+    }, Math.max(350, Number(fadeSeconds || 0) * 1000 + 80));
   }
 
   function showSlide(index) {
