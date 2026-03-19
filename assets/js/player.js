@@ -1,627 +1,426 @@
-(() => {
-  const config = window.INFOSCREEN_CONFIG || {};
-  const slides = Array.isArray(window.INFOSCREEN_SLIDES) ? window.INFOSCREEN_SLIDES : [];
-  const stage = document.getElementById('slide-stage');
-  const screen = document.getElementById('screen');
-  const rootOverlay = document.getElementById('transition-overlay-root');
-
-  const screenConfig = config.screen || {};
-  const clockConfig = config.clock || {};
-  const defaultDuration = Number(screenConfig.defaultDuration || 8);
-  const defaultFade = Number(screenConfig.defaultFade || 1);
-  const defaultFit = screenConfig.fit || 'contain';
-  const defaultBackground = screenConfig.background || '#ffffff';
-
-  const clockEnabled = clockConfig.enabled !== false;
-  const clockTimezone = clockConfig.timezone || 'Europe/Vienna';
-  const defaultClockDuration = Number(clockConfig.defaultDuration || 10);
-  const clockBackground = clockConfig.background || '#ffffff';
-  const clockTextColor = clockConfig.textColor || '#111111';
-  const clockShowSeconds = clockConfig.showSeconds === true;
-  const clockLogo = clockConfig.logo || '';
-  const clockLogoHeight = Number(clockConfig.logoHeight || 100);
-
-  const websiteDefaults = config.website || {};
-  const defaultWebsiteTimeout = Math.max(1, Number(websiteDefaults.timeout || 8));
-
-  let currentIndex = -1;
-  let currentNode = null;
-  let currentTimer = null;
-  let clockInterval = null;
-  let transitionToken = 0;
-  let transitionInProgress = false;
-
-  const logCooldowns = new Map();
-
-  if (screen) {
-    screen.style.background = defaultBackground;
-  }
-
-  function normalizePositiveNumber(value, fallback) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  }
-
-  function normalizeSlide(slide, index) {
-    const type = String(slide.type || '').toLowerCase();
-    return {
-      id: slide.id || `slide_${index + 1}`,
-      type,
-      title: slide.title || `Slide ${index + 1}`,
-      enabled: slide.enabled !== false,
-      duration: Number(slide.duration || 0) || (type === 'clock' ? defaultClockDuration : defaultDuration),
-      fade: Number(slide.fade || 0) || defaultFade,
-      sort: Number(slide.sort || 0),
-      file: slide.file || '',
-      url: slide.url || '',
-      bg: slide.bg || defaultBackground,
-      fit: slide.fit || defaultFit,
-      clock: slide.clock || {},
-      timeout: normalizePositiveNumber(slide.timeout || slide.websiteTimeout || 0, defaultWebsiteTimeout),
-      refreshSeconds: normalizePositiveNumber(slide.refreshSeconds || 0, 0),
-    };
-  }
-
-  const preparedSlides = slides
-    .map(normalizeSlide)
-    .filter((slide) => slide.enabled);
-
-  function sendLog(level, message, context = {}, cooldownKey = '', cooldownMs = 0) {
-    try {
-      const now = Date.now();
-
-      if (cooldownKey && cooldownMs > 0) {
-        const lastAt = logCooldowns.get(cooldownKey) || 0;
-        if (now - lastAt < cooldownMs) {
-          return;
-        }
-        logCooldowns.set(cooldownKey, now);
-      }
-
-      const payload = JSON.stringify({
-        level,
-        message,
-        context,
-      });
-
-      fetch('client_log.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-        keepalive: true,
-        cache: 'no-store',
-      }).catch(() => {});
-    } catch (_) {
-      // logging must never break playback
-    }
-  }
-
-  function clearNodeRuntime(node) {
-    if (!node) {
-      return;
-    }
-
-    if (node._websiteState?.timeoutHandle) {
-      clearTimeout(node._websiteState.timeoutHandle);
-      node._websiteState.timeoutHandle = null;
-    }
-
-    if (node._websiteState?.refreshHandle) {
-      clearInterval(node._websiteState.refreshHandle);
-      node._websiteState.refreshHandle = null;
-    }
-  }
-
-  function clearTimers() {
-    if (currentTimer) {
-      clearTimeout(currentTimer);
-      currentTimer = null;
-    }
-
-    if (clockInterval) {
-      clearInterval(clockInterval);
-      clockInterval = null;
-    }
-
-    clearNodeRuntime(currentNode);
-  }
-
-  function applyFade(node, seconds) {
-    node.style.transitionDuration = `${seconds}s, 0s`;
-  }
-
-  function setRootOverlayVisible(visible) {
-    if (!rootOverlay) {
-      return;
-    }
-
-    rootOverlay.classList.toggle('is-visible', visible);
-
-    sendLog(
-      'DEBUG',
-      visible ? 'Root overlay visible ON' : 'Root overlay visible OFF',
-      {},
-      `root-overlay-${visible ? 'on' : 'off'}`,
-      150
-    );
-  }
-
-  function makeBaseSlide(slide) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'slide';
-    wrapper.dataset.id = slide.id;
-    wrapper.dataset.type = slide.type;
-    wrapper.style.background = slide.bg || defaultBackground;
-    applyFade(wrapper, slide.fade);
-
-    const inner = document.createElement('div');
-    inner.className = 'slide-inner';
-    wrapper.appendChild(inner);
-
-    return { wrapper, inner };
-  }
-
-  function renderImageSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-    inner.classList.add(slide.fit === 'cover' ? 'media-cover' : 'media-contain');
-
-    const img = document.createElement('img');
-    img.src = slide.file;
-    img.alt = slide.title || '';
-    img.loading = 'eager';
-    inner.appendChild(img);
-
-    return wrapper;
-  }
-
-  function renderVideoSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-    inner.classList.add(slide.fit === 'cover' ? 'media-cover' : 'media-contain');
-
-    const video = document.createElement('video');
-    video.src = slide.file;
-    video.autoplay = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-    inner.appendChild(video);
-
-    return wrapper;
-  }
-
-  function renderPdfSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const embed = document.createElement('embed');
-    embed.src = slide.file;
-    embed.type = 'application/pdf';
-    embed.className = 'pdf-frame';
-    inner.appendChild(embed);
-
-    return wrapper;
-  }
-
-  function withCacheBuster(url) {
-    if (!url) {
-      return '';
-    }
-
-    try {
-      const parsed = new URL(url, window.location.href);
-      parsed.searchParams.set('_ifsr', String(Date.now()));
-      return parsed.toString();
-    } catch (_) {
-      const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}_ifsr=${Date.now()}`;
-    }
-  }
-
-  function renderWebsiteSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const iframe = document.createElement('iframe');
-    iframe.src = slide.url || 'about:blank';
-    iframe.className = 'website-frame';
-    iframe.loading = 'eager';
-    iframe.referrerPolicy = 'no-referrer';
-
-    wrapper._websiteState = {
-      iframe,
-      loaded: false,
-      failed: false,
-      timeoutHandle: null,
-      refreshHandle: null,
-      timeoutSeconds: slide.timeout,
-      refreshSeconds: slide.refreshSeconds,
-      originalUrl: slide.url || '',
-    };
-
-    inner.appendChild(iframe);
-    return wrapper;
-  }
-
-  function renderClockSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-    inner.classList.add('clock-slide');
-    inner.style.background = clockBackground;
-    inner.style.color = clockTextColor;
-
-    const logoPath = slide.clock?.logo || clockLogo || '';
-    const showLogo = slide.clock?.showLogo === true && !!logoPath;
-
-    if (showLogo) {
-      const logo = document.createElement('img');
-      logo.src = logoPath;
-      logo.alt = 'Logo';
-      logo.className = 'clock-logo';
-      logo.style.height = `${clockLogoHeight}px`;
-      logo.style.maxHeight = `${clockLogoHeight}px`;
-      logo.style.width = 'auto';
-      inner.appendChild(logo);
-    }
-
-    const timeEl = document.createElement('div');
-    timeEl.className = 'clock-time';
-
-    const dateEl = document.createElement('div');
-    dateEl.className = 'clock-date';
-
-    inner.appendChild(timeEl);
-    inner.appendChild(dateEl);
-    wrapper._clockElements = { timeEl, dateEl };
-
-    return wrapper;
-  }
-
-  function renderFallbackSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const note = document.createElement('div');
-    note.className = 'fallback-note';
-    note.textContent = `Unbekannter oder unvollständiger Slide-Typ: ${slide.type}`;
-    inner.appendChild(note);
-
-    return wrapper;
-  }
-
-  function createSlideNode(slide) {
-    switch (slide.type) {
-      case 'image':
-        return renderImageSlide(slide);
-      case 'video':
-        return renderVideoSlide(slide);
-      case 'pdf':
-        return renderPdfSlide(slide);
-      case 'website':
-        return renderWebsiteSlide(slide);
-      case 'clock':
-        return clockEnabled ? renderClockSlide(slide) : renderFallbackSlide(slide);
-      default:
-        return renderFallbackSlide(slide);
-    }
-  }
-
-  function updateClock(node) {
-    if (!node || !node._clockElements) {
-      return;
-    }
-
-    const now = new Date();
-
-    const timeOptions = {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: clockTimezone,
-    };
-
-    if (clockShowSeconds) {
-      timeOptions.second = '2-digit';
-    }
-
-    const timeText = new Intl.DateTimeFormat('de-AT', timeOptions).format(now);
-
-    const dateText = new Intl.DateTimeFormat('de-AT', {
-      weekday: 'long',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: clockTimezone,
-    }).format(now);
-
-    node._clockElements.timeEl.textContent = timeText;
-    node._clockElements.dateEl.textContent = dateText;
-  }
-
-  function advanceToNextSlide() {
-    if (!preparedSlides.length || transitionInProgress) {
-      return;
-    }
-
-    const nextIndex = (currentIndex + 1) % preparedSlides.length;
-    showSlide(nextIndex);
-  }
-
-  function setupWebsiteRuntime(node, slide) {
-    const websiteState = node?._websiteState;
-    if (!websiteState) {
-      return;
-    }
-
-    const { iframe } = websiteState;
-
-    if (!websiteState.originalUrl) {
-      sendLog(
-        'WARN',
-        'Website slide skipped: empty URL',
-        { slideId: slide.id, title: slide.title },
-        `website-empty-${slide.id}`,
-        60000
-      );
-      advanceToNextSlide();
-      return;
-    }
-
-    const markLoaded = () => {
-      if (websiteState.failed) {
+(function () {
+    'use strict';
+
+    const config = window.APP_CONFIG || {};
+    const playlist = window.APP_PLAYLIST || {};
+    const slides = Array.isArray(playlist.slides) ? playlist.slides.slice() : [];
+
+    const layerA = document.getElementById('slide-layer-a');
+    const layerB = document.getElementById('slide-layer-b');
+    const rootOverlay = document.getElementById('transition-overlay-root');
+
+    if (!layerA || !layerB || !rootOverlay) {
+        console.error('[player] missing required DOM nodes');
         return;
-      }
-
-      websiteState.loaded = true;
-
-      if (websiteState.timeoutHandle) {
-        clearTimeout(websiteState.timeoutHandle);
-        websiteState.timeoutHandle = null;
-      }
-
-      sendLog(
-        'INFO',
-        'Website slide loaded',
-        {
-          slideId: slide.id,
-          title: slide.title,
-          url: websiteState.originalUrl,
-        },
-        `website-loaded-${slide.id}`,
-        5000
-      );
-    };
-
-    const markFailedAndSkip = (reason) => {
-      if (websiteState.failed) {
-        return;
-      }
-
-      websiteState.failed = true;
-
-      if (websiteState.timeoutHandle) {
-        clearTimeout(websiteState.timeoutHandle);
-        websiteState.timeoutHandle = null;
-      }
-
-      if (websiteState.refreshHandle) {
-        clearInterval(websiteState.refreshHandle);
-        websiteState.refreshHandle = null;
-      }
-
-      node.dataset.websiteState = reason;
-
-      sendLog(
-        'WARN',
-        'Website slide skipped',
-        {
-          slideId: slide.id,
-          title: slide.title,
-          url: websiteState.originalUrl,
-          reason,
-        },
-        `website-fail-${slide.id}-${reason}`,
-        5000
-      );
-
-      advanceToNextSlide();
-    };
-
-    iframe.addEventListener('load', () => {
-      markLoaded();
-    }, { once: true });
-
-    iframe.addEventListener('error', () => {
-      markFailedAndSkip('error');
-    }, { once: true });
-
-    websiteState.timeoutHandle = window.setTimeout(() => {
-      if (!websiteState.loaded) {
-        markFailedAndSkip('timeout');
-      }
-    }, websiteState.timeoutSeconds * 1000);
-
-    if (websiteState.refreshSeconds > 0) {
-      websiteState.refreshHandle = window.setInterval(() => {
-        if (websiteState.failed || !node.classList.contains('active')) {
-          return;
-        }
-
-        websiteState.loaded = false;
-
-        if (websiteState.timeoutHandle) {
-          clearTimeout(websiteState.timeoutHandle);
-        }
-
-        sendLog(
-          'DEBUG',
-          'Website slide refresh',
-          {
-            slideId: slide.id,
-            title: slide.title,
-            url: websiteState.originalUrl,
-            refreshSeconds: websiteState.refreshSeconds,
-          },
-          `website-refresh-${slide.id}`,
-          10000
-        );
-
-        websiteState.timeoutHandle = window.setTimeout(() => {
-          if (!websiteState.loaded) {
-            markFailedAndSkip('timeout_after_refresh');
-          }
-        }, websiteState.timeoutSeconds * 1000);
-
-        iframe.src = withCacheBuster(websiteState.originalUrl);
-      }, websiteState.refreshSeconds * 1000);
-    }
-  }
-
-  function activateNode(node, slide) {
-    stage.appendChild(node);
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        node.classList.add('active');
-      });
-    });
-
-    sendLog(
-      'INFO',
-      'Slide shown',
-      {
-        slideId: slide.id,
-        type: slide.type,
-        title: slide.title,
-        duration: slide.duration,
-        fade: slide.fade,
-      },
-      `slide-shown-${slide.id}`,
-      1000
-    );
-
-    if (slide.type === 'clock') {
-      updateClock(node);
-      clockInterval = setInterval(() => updateClock(node), 1000);
     }
 
-    if (slide.type === 'video') {
-      const video = node.querySelector('video');
-      if (video) {
+    const enabledSlides = slides
+        .filter((slide) => slide && slide.enabled !== false)
+        .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0));
+
+    let activeLayer = layerA;
+    let standbyLayer = layerB;
+    let currentIndex = -1;
+    let slideTimer = null;
+    let videoEndHandler = null;
+    let clockIntervals = new WeakMap();
+    let transitionToken = 0;
+    let isTransitioning = false;
+    let hasStartedPlayback = false;
+
+    function trace(message) {
+        console.log('[player] ' + message);
+    }
+
+    function clearSlideTimer() {
+        if (slideTimer) {
+            clearTimeout(slideTimer);
+            slideTimer = null;
+        }
+    }
+
+    function clearLayerClock(layer) {
+        const intervalId = clockIntervals.get(layer);
+        if (intervalId) {
+            clearInterval(intervalId);
+            clockIntervals.delete(layer);
+        }
+    }
+
+    function cleanupLayer(layer) {
+        if (!layer) {
+            return;
+        }
+
+        clearLayerClock(layer);
+
+        const videos = layer.querySelectorAll('video');
+        videos.forEach((video) => {
+            try {
+                video.pause();
+            } catch (err) {
+                // ignore
+            }
+
+            if (videoEndHandler) {
+                video.removeEventListener('ended', videoEndHandler);
+            }
+
+            video.removeAttribute('src');
+
+            try {
+                video.load();
+            } catch (err) {
+                // ignore
+            }
+        });
+
+        layer.innerHTML = '';
+        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next', 'is-active');
+        layer.style.background = '#000000';
+    }
+
+    function normalizeDuration(slide) {
+        const value = Number(slide && slide.duration);
+        if (Number.isFinite(value) && value > 0) {
+            return value;
+        }
+        return 10;
+    }
+
+    function normalizeFade(slide) {
+        const value = Number(slide && slide.fade);
+        if (Number.isFinite(value) && value >= 0) {
+            return value;
+        }
+        return 1.2;
+    }
+
+    function getFitClass(slide) {
+        const fit = String((slide && slide.fit) || 'contain').toLowerCase();
+        return fit === 'cover' ? 'slide-layer--cover' : 'slide-layer--contain';
+    }
+
+    function resolveSlideType(slide) {
+        const type = String((slide && slide.type) || '').toLowerCase();
+        if (type) {
+            return type;
+        }
+
+        const file = String((slide && slide.file) || '').toLowerCase();
+        if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(file)) {
+            return 'image';
+        }
+        if (/\.(mp4|webm|ogg|mov|m4v)$/.test(file)) {
+            return 'video';
+        }
+        if (/\.pdf$/.test(file)) {
+            return 'pdf';
+        }
+        return 'website';
+    }
+
+    function setLayerBackground(layer, slide) {
+        const bg = String((slide && slide.bg) || '#000000');
+        layer.style.background = bg;
+    }
+
+    function formatDate(date) {
+        try {
+            return new Intl.DateTimeFormat('de-AT', {
+                weekday: 'long',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            }).format(date);
+        } catch (err) {
+            return date.toLocaleDateString();
+        }
+    }
+
+    function formatTime(date) {
+        try {
+            return new Intl.DateTimeFormat('de-AT', {
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        } catch (err) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+    }
+
+    function setOverlayVisible(visible) {
+        rootOverlay.classList.toggle('is-visible', visible);
+        trace(visible ? 'Overlay visible ON (root)' : 'Overlay visible OFF (root)');
+    }
+
+    function buildClockSlide(layer) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'slide-clock';
+
+        const inner = document.createElement('div');
+        inner.className = 'slide-clock__inner';
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'slide-clock__time';
+
+        const dateEl = document.createElement('div');
+        dateEl.className = 'slide-clock__date';
+
+        function updateClock() {
+            const now = new Date();
+            timeEl.textContent = formatTime(now);
+            dateEl.textContent = formatDate(now);
+        }
+
+        updateClock();
+        const intervalId = window.setInterval(updateClock, 1000);
+        clockIntervals.set(layer, intervalId);
+
+        inner.appendChild(timeEl);
+        inner.appendChild(dateEl);
+        wrapper.appendChild(inner);
+        layer.appendChild(wrapper);
+    }
+
+    function buildMessageSlide(layer, text) {
+        const message = document.createElement('div');
+        message.className = 'slide-message';
+        message.textContent = text;
+        layer.appendChild(message);
+    }
+
+    function renderImageSlide(layer, slide) {
+        const img = document.createElement('img');
+        img.src = slide.file || '';
+        img.alt = slide.title || '';
+        img.loading = 'eager';
+        layer.appendChild(img);
+    }
+
+    function renderVideoSlide(layer, slide) {
+        const video = document.createElement('video');
+        video.src = slide.file || '';
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+
+        videoEndHandler = function () {
+            trace('Video ended');
+            nextSlide();
+        };
+
+        video.addEventListener('ended', videoEndHandler);
+        layer.appendChild(video);
+
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(() => {
-            sendLog(
-              'WARN',
-              'Video play promise rejected',
-              {
-                slideId: slide.id,
-                title: slide.title,
-                file: slide.file,
-              },
-              `video-play-${slide.id}`,
-              5000
-            );
-          });
+            playPromise.catch((err) => {
+                trace('Video autoplay failed: ' + err.message);
+            });
         }
-      }
     }
 
-    if (slide.type === 'website') {
-      setupWebsiteRuntime(node, slide);
+    function renderWebsiteSlide(layer, slide) {
+        const iframe = document.createElement('iframe');
+        iframe.src = slide.url || slide.file || '';
+        iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+        iframe.setAttribute('allow', 'autoplay; fullscreen');
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+        layer.appendChild(iframe);
     }
-  }
 
-  function deactivateOldNode(oldNode, fadeSeconds) {
-    if (!oldNode) {
-      return;
+    function renderPdfSlide(layer, slide) {
+        const iframe = document.createElement('iframe');
+        iframe.src = slide.file || '';
+        iframe.setAttribute('title', slide.title || 'PDF');
+        layer.appendChild(iframe);
     }
 
-    clearNodeRuntime(oldNode);
-    oldNode.classList.remove('active');
-    oldNode.classList.add('leaving');
-    oldNode.style.transitionDuration = `${fadeSeconds}s, 0s`;
+    function renderSlideIntoLayer(layer, slide) {
+        cleanupLayer(layer);
+        setLayerBackground(layer, slide);
+        layer.classList.add(getFitClass(slide));
 
-    window.setTimeout(() => {
-      oldNode.remove();
-    }, Math.max(350, fadeSeconds * 1000 + 80));
-  }
+        const type = resolveSlideType(slide);
+        trace('Render slide type=' + type + ' title=' + String(slide.title || ''));
 
-  function finishTransition(token, slide) {
-    const fadeSeconds = Math.max(0.08, Number(slide.fade || defaultFade));
-    const fadeOutMs = Math.max(90, Math.round(fadeSeconds * 500));
+        switch (type) {
+            case 'image':
+                renderImageSlide(layer, slide);
+                break;
+            case 'video':
+                renderVideoSlide(layer, slide);
+                break;
+            case 'website':
+                renderWebsiteSlide(layer, slide);
+                break;
+            case 'pdf':
+                renderPdfSlide(layer, slide);
+                break;
+            case 'clock':
+                buildClockSlide(layer);
+                break;
+            default:
+                buildMessageSlide(layer, 'Unbekannter Slide-Typ: ' + type);
+                break;
+        }
+    }
 
-    window.setTimeout(() => {
-      if (token !== transitionToken) {
-        return;
-      }
+    function activateLayer(nextLayer) {
+        layerA.classList.remove('is-active', 'is-next');
+        layerB.classList.remove('is-active', 'is-next');
+        nextLayer.classList.add('is-active');
 
-      setRootOverlayVisible(false);
+        if (nextLayer === layerA) {
+            activeLayer = layerA;
+            standbyLayer = layerB;
+        } else {
+            activeLayer = layerB;
+            standbyLayer = layerA;
+        }
+    }
 
-      window.setTimeout(() => {
-        if (token !== transitionToken) {
-          return;
+    function scheduleNextSlide(slide) {
+        clearSlideTimer();
+
+        if (!slide) {
+            return;
         }
 
-        transitionInProgress = false;
-      }, fadeOutMs + 30);
-    }, 40);
-  }
+        if (resolveSlideType(slide) === 'video') {
+            return;
+        }
 
-  function showSlide(index) {
-    clearTimers();
-
-    if (!preparedSlides.length || !stage) {
-      if (stage) {
-        stage.innerHTML = 'Keine aktiven Slides vorhanden.';
-      }
-      return;
+        const durationMs = Math.max(1000, normalizeDuration(slide) * 1000);
+        slideTimer = window.setTimeout(nextSlide, durationMs);
     }
 
-    const slide = preparedSlides[index];
-    const node = createSlideNode(slide);
-    const oldNode = currentNode;
+    function finishTransition(myToken, oldLayer, nextSlideData, fadeOutMs) {
+        window.setTimeout(() => {
+            if (myToken !== transitionToken) {
+                return;
+            }
 
-    currentNode = node;
-    currentIndex = index;
+            setOverlayVisible(false);
 
-    const token = ++transitionToken;
-    const fadeSeconds = Math.max(0.08, Number(slide.fade || defaultFade));
-    const fadeInMs = Math.max(90, Math.round(fadeSeconds * 500));
+            window.setTimeout(() => {
+                if (myToken !== transitionToken) {
+                    return;
+                }
 
-    transitionInProgress = true;
-
-    activateNode(node, slide);
-
-    setRootOverlayVisible(true);
-
-    window.setTimeout(() => {
-      if (token !== transitionToken) {
-        return;
-      }
-
-      deactivateOldNode(oldNode, slide.fade);
-      finishTransition(token, slide);
-    }, fadeInMs);
-
-    const nextDelay = Math.max(1, slide.duration) * 1000;
-    currentTimer = window.setTimeout(() => {
-      advanceToNextSlide();
-    }, nextDelay);
-  }
-
-  function startPlayer() {
-    if (!preparedSlides.length) {
-      if (stage) {
-        stage.innerHTML = 'Keine aktiven Slides vorhanden.';
-      }
-      return;
+                cleanupLayer(oldLayer);
+                isTransitioning = false;
+                trace('Overlay transition complete');
+                scheduleNextSlide(nextSlideData);
+            }, fadeOutMs + 40);
+        }, 40);
     }
 
-    sendLog(
-      'INFO',
-      'Player started',
-      { slidesTotal: preparedSlides.length },
-      'player-started',
-      5000
-    );
+    function performTransition(nextSlideData) {
+        const myToken = ++transitionToken;
+        isTransitioning = true;
+        clearSlideTimer();
 
-    showSlide(0);
-  }
+        const oldLayer = activeLayer;
+        const nextLayer = standbyLayer;
+        const totalFadeMs = Math.max(180, Math.round(normalizeFade(nextSlideData) * 1000));
+        const fadeInMs = Math.max(90, Math.round(totalFadeMs * 0.35));
+        const fadeOutMs = Math.max(90, Math.round(totalFadeMs * 0.35));
+        const settleMs = Math.max(120, Math.round(totalFadeMs * 0.20));
 
-  startPlayer();
+        trace(
+            'Overlay transition start total=' +
+            totalFadeMs +
+            ' in=' +
+            fadeInMs +
+            ' settle=' +
+            settleMs +
+            ' out=' +
+            fadeOutMs
+        );
+
+        renderSlideIntoLayer(nextLayer, nextSlideData);
+
+        nextLayer.classList.add('is-next');
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (myToken !== transitionToken) {
+                    return;
+                }
+
+                setOverlayVisible(true);
+
+                window.setTimeout(() => {
+                    if (myToken !== transitionToken) {
+                        return;
+                    }
+
+                    activateLayer(nextLayer);
+
+                    window.setTimeout(() => {
+                        if (myToken !== transitionToken) {
+                            return;
+                        }
+
+                        finishTransition(myToken, oldLayer, nextSlideData, fadeOutMs);
+                    }, settleMs);
+                }, fadeInMs);
+            });
+        });
+    }
+
+    function nextSlide() {
+        if (isTransitioning) {
+            trace('Skip nextSlide because transition is active');
+            return;
+        }
+
+        if (!enabledSlides.length) {
+            cleanupLayer(layerA);
+            cleanupLayer(layerB);
+            buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
+            activeLayer.classList.add('is-active');
+            return;
+        }
+
+        currentIndex = (currentIndex + 1) % enabledSlides.length;
+        const slide = enabledSlides[currentIndex];
+
+        if (!hasStartedPlayback) {
+            renderSlideIntoLayer(activeLayer, slide);
+            activeLayer.classList.add('is-active');
+            hasStartedPlayback = true;
+            trace('Initial slide shown without root overlay');
+            scheduleNextSlide(slide);
+            return;
+        }
+
+        performTransition(slide);
+    }
+
+    function start() {
+        if (!enabledSlides.length) {
+            buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
+            activeLayer.classList.add('is-active');
+            return;
+        }
+
+        trace('Player start');
+        nextSlide();
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        trace('Visibility changed: ' + document.visibilityState);
+    });
+
+    window.addEventListener('beforeunload', function () {
+        clearSlideTimer();
+        clearLayerClock(layerA);
+        clearLayerClock(layerB);
+    });
+
+    start();
 })();
