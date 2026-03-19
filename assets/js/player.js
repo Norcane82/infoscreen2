@@ -28,11 +28,18 @@
   let currentNode = null;
   let currentTimer = null;
   let clockInterval = null;
-
-  const logCooldowns = new Map();
+  let transitionToken = 0;
 
   if (screen) {
     screen.style.background = defaultBackground;
+  }
+
+  function logDebug(message, extra = null) {
+    if (extra !== null) {
+      console.info(`[infoscreen2] ${message}`, extra);
+      return;
+    }
+    console.info(`[infoscreen2] ${message}`);
   }
 
   function normalizePositiveNumber(value, fallback) {
@@ -56,8 +63,11 @@
       bg: slide.bg || defaultBackground,
       fit: slide.fit || defaultFit,
       clock: slide.clock || {},
-      timeout: normalizePositiveNumber(slide.timeout || slide.websiteTimeout || 0, defaultWebsiteTimeout),
-      refreshSeconds: normalizePositiveNumber(slide.refreshSeconds || 0, 0),
+      timeout: normalizePositiveNumber(
+        slide.timeout || slide.websiteTimeout || 0,
+        defaultWebsiteTimeout
+      ),
+      refreshSeconds: normalizePositiveNumber(slide.refreshSeconds || 0, 0)
     };
   }
 
@@ -65,34 +75,19 @@
     .map(normalizeSlide)
     .filter((slide) => slide.enabled);
 
-  function sendLog(level, message, context = {}, cooldownKey = '', cooldownMs = 0) {
-    try {
-      const now = Date.now();
-
-      if (cooldownKey && cooldownMs > 0) {
-        const lastAt = logCooldowns.get(cooldownKey) || 0;
-        if (now - lastAt < cooldownMs) {
-          return;
-        }
-        logCooldowns.set(cooldownKey, now);
-      }
-
-      const payload = JSON.stringify({
-        level,
-        message,
-        context,
-      });
-
-      fetch('client_log.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload,
-        keepalive: true,
-        cache: 'no-store',
-      }).catch(() => {});
-    } catch (_) {
-      // logging must never break playback
+  function ensureOverlay() {
+    if (!stage) {
+      return null;
     }
+
+    let overlay = stage.querySelector('.transition-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'transition-overlay';
+      stage.appendChild(overlay);
+    }
+
+    return overlay;
   }
 
   function clearNodeRuntime(node) {
@@ -125,19 +120,12 @@
     clearNodeRuntime(currentNode);
   }
 
-  function applyFade(node, seconds) {
-    const fadeSeconds = Math.max(0, Number(seconds) || 0);
-    node.style.transition = `opacity ${fadeSeconds}s ease`;
-  }
-
   function makeBaseSlide(slide) {
     const wrapper = document.createElement('div');
     wrapper.className = 'slide';
     wrapper.dataset.id = slide.id;
     wrapper.dataset.type = slide.type;
     wrapper.style.background = slide.bg || defaultBackground;
-
-    applyFade(wrapper, slide.fade);
 
     const inner = document.createElement('div');
     inner.className = 'slide-inner';
@@ -201,7 +189,7 @@
       const parsed = new URL(url, window.location.href);
       parsed.searchParams.set('_ifsr', String(Date.now()));
       return parsed.toString();
-    } catch (_) {
+    } catch (error) {
       const separator = url.includes('?') ? '&' : '?';
       return `${url}${separator}_ifsr=${Date.now()}`;
     }
@@ -219,12 +207,12 @@
     wrapper._websiteState = {
       iframe,
       loaded: false,
-      failed: false,
+      timedOut: false,
       timeoutHandle: null,
       refreshHandle: null,
       timeoutSeconds: slide.timeout,
       refreshSeconds: slide.refreshSeconds,
-      originalUrl: slide.url || '',
+      originalUrl: slide.url || ''
     };
 
     inner.appendChild(iframe);
@@ -305,7 +293,7 @@
     const timeOptions = {
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: clockTimezone,
+      timeZone: clockTimezone
     };
 
     if (clockShowSeconds) {
@@ -318,7 +306,7 @@
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
-      timeZone: clockTimezone,
+      timeZone: clockTimezone
     }).format(now);
 
     node._clockElements.timeEl.textContent = timeText;
@@ -343,16 +331,16 @@
     const { iframe } = websiteState;
 
     if (!websiteState.originalUrl) {
-      sendLog('WARN', 'Website slide skipped: empty URL', {
+      logDebug('Website-Slide ohne URL wird übersprungen.', {
         slideId: slide.id,
-        title: slide.title,
-      }, `website-empty-${slide.id}`, 60000);
+        title: slide.title
+      });
       advanceToNextSlide();
       return;
     }
 
     const markLoaded = () => {
-      if (websiteState.failed) {
+      if (websiteState.timedOut) {
         return;
       }
 
@@ -363,19 +351,19 @@
         websiteState.timeoutHandle = null;
       }
 
-      sendLog('INFO', 'Website slide loaded', {
+      logDebug('Website-Slide geladen.', {
         slideId: slide.id,
         title: slide.title,
-        url: websiteState.originalUrl,
-      }, `website-loaded-${slide.id}`, 5000);
+        url: websiteState.originalUrl
+      });
     };
 
     const markFailedAndSkip = (reason) => {
-      if (websiteState.failed) {
+      if (websiteState.timedOut) {
         return;
       }
 
-      websiteState.failed = true;
+      websiteState.timedOut = true;
 
       if (websiteState.timeoutHandle) {
         clearTimeout(websiteState.timeoutHandle);
@@ -389,23 +377,31 @@
 
       node.dataset.websiteState = reason;
 
-      sendLog('WARN', 'Website slide skipped', {
+      logDebug('Website-Slide fehlgeschlagen, nächster Slide wird geladen.', {
         slideId: slide.id,
         title: slide.title,
         url: websiteState.originalUrl,
-        reason,
-      }, `website-fail-${slide.id}-${reason}`, 5000);
+        reason
+      });
 
       advanceToNextSlide();
     };
 
-    iframe.addEventListener('load', () => {
-      markLoaded();
-    }, { once: true });
+    iframe.addEventListener(
+      'load',
+      () => {
+        markLoaded();
+      },
+      { once: true }
+    );
 
-    iframe.addEventListener('error', () => {
-      markFailedAndSkip('error');
-    }, { once: true });
+    iframe.addEventListener(
+      'error',
+      () => {
+        markFailedAndSkip('error');
+      },
+      { once: true }
+    );
 
     websiteState.timeoutHandle = window.setTimeout(() => {
       if (!websiteState.loaded) {
@@ -415,22 +411,22 @@
 
     if (websiteState.refreshSeconds > 0) {
       websiteState.refreshHandle = window.setInterval(() => {
-        if (websiteState.failed || !node.classList.contains('active')) {
+        if (websiteState.timedOut || !node.classList.contains('active')) {
           return;
         }
+
+        logDebug('Website-Slide wird neu geladen.', {
+          slideId: slide.id,
+          title: slide.title,
+          url: websiteState.originalUrl,
+          refreshSeconds: websiteState.refreshSeconds
+        });
 
         websiteState.loaded = false;
 
         if (websiteState.timeoutHandle) {
           clearTimeout(websiteState.timeoutHandle);
         }
-
-        sendLog('DEBUG', 'Website slide refresh', {
-          slideId: slide.id,
-          title: slide.title,
-          url: websiteState.originalUrl,
-          refreshSeconds: websiteState.refreshSeconds,
-        }, `website-refresh-${slide.id}`, 10000);
 
         websiteState.timeoutHandle = window.setTimeout(() => {
           if (!websiteState.loaded) {
@@ -448,16 +444,8 @@
       return;
     }
 
-    node.classList.add('is-prepared');
     stage.appendChild(node);
-
-    sendLog('INFO', 'Slide shown', {
-      slideId: slide.id,
-      type: slide.type,
-      title: slide.title,
-      duration: slide.duration,
-      fade: slide.fade,
-    }, `slide-shown-${slide.id}`, 1000);
+    node.classList.add('active');
 
     if (slide.type === 'clock') {
       updateClock(node);
@@ -469,13 +457,7 @@
       if (video) {
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(() => {
-            sendLog('WARN', 'Video play promise rejected', {
-              slideId: slide.id,
-              title: slide.title,
-              file: slide.file,
-            }, `video-play-${slide.id}`, 5000);
-          });
+          playPromise.catch(() => {});
         }
       }
     }
@@ -485,32 +467,53 @@
     }
   }
 
-  function runTransition(oldNode, newNode, fadeSeconds) {
-    const fadeMs = Math.max(0, Number(fadeSeconds) || 0) * 1000;
+  function cleanupOldSlides(keepNode, overlay) {
+    const nodes = Array.from(stage.querySelectorAll('.slide'));
+    nodes.forEach((node) => {
+      if (node === keepNode) {
+        return;
+      }
+      clearNodeRuntime(node);
+      node.remove();
+    });
 
-    // Commit initial DOM state.
-    void stage.offsetWidth;
+    if (overlay && overlay.parentNode === stage) {
+      stage.appendChild(overlay);
+    }
+  }
+
+  function runOverlayTransition(nextNode, fadeSeconds) {
+    const overlay = ensureOverlay();
+    if (!overlay) {
+      cleanupOldSlides(nextNode, null);
+      return;
+    }
+
+    const token = ++transitionToken;
+    const fadeMs = Math.max(0, Number(fadeSeconds) || 0) * 1000;
+    const halfFadeMs = Math.max(120, Math.round(fadeMs / 2));
+
+    overlay.style.transition = `opacity ${halfFadeMs}ms ease`;
+    overlay.classList.remove('visible');
+    void overlay.offsetWidth;
 
     window.setTimeout(() => {
-      if (oldNode) {
-        oldNode.classList.remove('is-prepared');
-        oldNode.classList.remove('active');
-        void oldNode.offsetWidth;
-        oldNode.classList.add('leaving');
+      if (token !== transitionToken) {
+        return;
       }
 
-      // Let the browser see the old slide leaving before activating the new one.
-      window.setTimeout(() => {
-        newNode.classList.add('active');
-        newNode.classList.remove('is-prepared');
-      }, 34);
-    }, 34);
+      overlay.classList.add('visible');
 
-    if (oldNode) {
       window.setTimeout(() => {
-        oldNode.remove();
-      }, Math.max(400, fadeMs + 180));
-    }
+        if (token !== transitionToken) {
+          return;
+        }
+
+        cleanupOldSlides(nextNode, overlay);
+
+        overlay.classList.remove('visible');
+      }, halfFadeMs + 20);
+    }, 20);
   }
 
   function showSlide(index) {
@@ -525,10 +528,9 @@
 
     const slide = preparedSlides[index];
     const node = createSlideNode(slide);
-    const oldNode = currentNode;
 
     activateNode(node, slide);
-    runTransition(oldNode, node, slide.fade);
+    runOverlayTransition(node, slide.fade);
 
     currentNode = node;
     currentIndex = index;
@@ -547,10 +549,6 @@
       }
       return;
     }
-
-    sendLog('INFO', 'Player started', {
-      slidesTotal: preparedSlides.length,
-    }, 'player-started', 5000);
 
     showSlide(0);
   }
