@@ -7,7 +7,6 @@
 
     const layerA = document.getElementById('slide-layer-a');
     const layerB = document.getElementById('slide-layer-b');
-    const rootOverlay = document.getElementById('transition-overlay-root');
 
     if (!layerA || !layerB) {
         console.error('[player] missing required DOM nodes');
@@ -174,14 +173,6 @@
         }
     }
 
-    function setOverlayVisible(visible) {
-        if (!rootOverlay) {
-            return;
-        }
-
-        rootOverlay.classList.toggle('is-visible', !!visible);
-    }
-
     function buildClockSlide(layer) {
         const wrapper = document.createElement('div');
         wrapper.className = 'slide-clock';
@@ -322,8 +313,7 @@
 
             cleanupLayer(oldLayer);
 
-            nextLayer.classList.remove('is-next');
-            nextLayer.classList.remove('is-leaving');
+            nextLayer.classList.remove('is-next', 'is-leaving');
             nextLayer.classList.add('is-active');
 
             activeLayer = nextLayer;
@@ -358,8 +348,6 @@
                 if (myToken !== transitionToken) {
                     return;
                 }
-
-                setOverlayVisible(false);
 
                 nextLayer.classList.add('is-next');
                 oldLayer.classList.remove('is-active');
@@ -407,7 +395,6 @@
         }
 
         trace('Player start');
-        setOverlayVisible(false);
         nextSlide();
     }
 
