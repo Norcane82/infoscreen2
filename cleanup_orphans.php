@@ -4,52 +4,43 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/playlist.php';
 
-function redirect_admin_cleanup(): void
+function redirect_admin_cleanup(int $deletedCount = 0, int $keptCount = 0): void
 {
-    header('Location: admin.php');
+    header('Location: admin.php?cleanup=1&deleted=' . $deletedCount . '&kept=' . $keptCount);
     exit;
 }
 
-function normalize_relative_upload_path(string $path): ?string
+function normalize_relative_path(string $path): string
 {
-    $path = trim(str_replace('\\', '/', $path));
-
-    if ($path === '' || !str_starts_with($path, 'uploads/')) {
-        return null;
-    }
-
-    return $path;
+    $path = str_replace('\\', '/', $path);
+    $path = preg_replace('#/+#', '/', $path) ?? $path;
+    return ltrim($path, '/');
 }
 
 function collect_referenced_files(array $config, array $slides): array
 {
     $referenced = [];
 
-    $add = static function ($path) use (&$referenced): void {
-        if (!is_string($path)) {
-            return;
-        }
-
-        $normalized = normalize_relative_upload_path($path);
-        if ($normalized === null) {
-            return;
-        }
-
-        $referenced[$normalized] = true;
-    };
-
-    $add($config['clock']['logo'] ?? null);
+    $clockLogo = (string)($config['clock']['logo'] ?? '');
+    if ($clockLogo !== '') {
+        $referenced[normalize_relative_path($clockLogo)] = true;
+    }
 
     foreach ($slides as $slide) {
         if (!is_array($slide)) {
             continue;
         }
 
-        $add($slide['file'] ?? null);
-        $add($slide['sourceFile'] ?? null);
+        foreach (['file', 'sourceFile'] as $key) {
+            $value = trim((string)($slide[$key] ?? ''));
+            if ($value !== '') {
+                $referenced[normalize_relative_path($value)] = true;
+            }
+        }
 
-        if (($slide['type'] ?? '') === 'clock' && isset($slide['clock']) && is_array($slide['clock'])) {
-            $add($slide['clock']['logo'] ?? null);
+        $clockLogoSlide = trim((string)($slide['clock']['logo'] ?? ''));
+        if ($clockLogoSlide !== '') {
+            $referenced[normalize_relative_path($clockLogoSlide)] = true;
         }
     }
 
@@ -60,38 +51,39 @@ function collect_candidate_files(array $directories): array
 {
     $files = [];
 
-    foreach ($directories as $dir) {
-        $fullDir = __DIR__ . '/' . $dir;
+    foreach ($directories as $relativeDir) {
+        $fullDir = __DIR__ . '/' . $relativeDir;
         if (!is_dir($fullDir)) {
             continue;
         }
 
-        $entries = scandir($fullDir);
-        if ($entries === false) {
-            continue;
-        }
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($fullDir, FilesystemIterator::SKIP_DOTS)
+        );
 
-        foreach ($entries as $entry) {
-            if ($entry === '.' || $entry === '..' || $entry === '.gitkeep') {
+        foreach ($iterator as $item) {
+            if (!$item->isFile()) {
                 continue;
             }
 
-            $relativePath = $dir . '/' . $entry;
-            $fullPath = __DIR__ . '/' . $relativePath;
-
-            if (is_file($fullPath)) {
-                $files[] = str_replace('\\', '/', $relativePath);
+            $fullPath = str_replace('\\', '/', $item->getPathname());
+            $root = str_replace('\\', '/', __DIR__) . '/';
+            if (str_starts_with($fullPath, $root)) {
+                $files[] = substr($fullPath, strlen($root));
             }
         }
     }
 
+    $files = array_map('normalize_relative_path', $files);
+    $files = array_values(array_unique($files));
     sort($files);
+
     return $files;
 }
 
 function write_cleanup_log(array $deletedFiles, array $keptFiles): void
 {
-    $line = json_encode([
+    $entry = [
         'time' => date('c'),
         'level' => 'INFO',
         'message' => 'Orphan cleanup finished',
@@ -100,8 +92,9 @@ function write_cleanup_log(array $deletedFiles, array $keptFiles): void
             'kept_count' => count($keptFiles),
             'deleted_files' => $deletedFiles,
         ],
-    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    ];
 
+    $line = json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($line === false) {
         return;
     }
@@ -144,5 +137,4 @@ foreach ($candidateFiles as $relativePath) {
 }
 
 write_cleanup_log($deletedFiles, $keptFiles);
-
-redirect_admin_cleanup();
+redirect_admin_cleanup(count($deletedFiles), count($keptFiles));
