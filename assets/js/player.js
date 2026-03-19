@@ -1,622 +1,352 @@
-(() => {
-  const config = window.INFOSCREEN_CONFIG || {};
-  const slides = Array.isArray(window.INFOSCREEN_SLIDES) ? window.INFOSCREEN_SLIDES : [];
-  const stage = document.getElementById('slide-stage');
-  const screen = document.getElementById('screen');
-
-  const screenConfig = config.screen || {};
-  const clockConfig = config.clock || {};
-
-  const defaultDuration = Number(screenConfig.defaultDuration || 8);
-  const defaultFade = Number(screenConfig.defaultFade || 1);
-  const defaultFit = screenConfig.fit || 'contain';
-  const defaultBackground = screenConfig.background || '#ffffff';
-
-  const clockEnabled = clockConfig.enabled !== false;
-  const clockTimezone = clockConfig.timezone || 'Europe/Vienna';
-  const defaultClockDuration = Number(clockConfig.defaultDuration || 10);
-  const clockBackground = clockConfig.background || '#ffffff';
-  const clockTextColor = clockConfig.textColor || '#111111';
-  const clockShowSeconds = clockConfig.showSeconds === true;
-  const clockLogo = clockConfig.logo || '';
-  const clockLogoHeight = Number(clockConfig.logoHeight || 100);
-
-  const websiteDefaults = config.website || {};
-  const defaultWebsiteTimeout = Math.max(1, Number(websiteDefaults.timeout || 8));
-
-  let currentIndex = -1;
-  let currentNode = null;
-  let currentTimer = null;
-  let clockInterval = null;
-  let transitionToken = 0;
-
-  if (screen) {
-    screen.style.background = defaultBackground;
-  }
-
-  function sendLog(level, message, context = {}) {
-    try {
-      fetch('client_log.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          level,
-          message,
-          context,
-        }),
-        keepalive: true,
-        cache: 'no-store',
-      }).catch(() => {});
-    } catch (_) {
-      // logging must never break playback
-    }
-  }
-
-  function logDebug(message, extra = null) {
-    if (extra !== null) {
-      console.info(`[infoscreen2] ${message}`, extra);
-      sendLog('DEBUG', message, extra);
-      return;
-    }
-    console.info(`[infoscreen2] ${message}`);
-    sendLog('DEBUG', message, {});
-  }
-
-  function normalizePositiveNumber(value, fallback) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  }
-
-  function normalizeSlide(slide, index) {
-    const type = String(slide.type || '').toLowerCase();
-
-    return {
-      id: slide.id || `slide_${index + 1}`,
-      type,
-      title: slide.title || `Slide ${index + 1}`,
-      enabled: slide.enabled !== false,
-      duration: Number(slide.duration || 0) || (type === 'clock' ? defaultClockDuration : defaultDuration),
-      fade: Number(slide.fade || 0) || defaultFade,
-      sort: Number(slide.sort || 0),
-      file: slide.file || '',
-      url: slide.url || '',
-      bg: slide.bg || defaultBackground,
-      fit: slide.fit || defaultFit,
-      clock: slide.clock || {},
-      timeout: normalizePositiveNumber(
-        slide.timeout || slide.websiteTimeout || 0,
-        defaultWebsiteTimeout
-      ),
-      refreshSeconds: normalizePositiveNumber(slide.refreshSeconds || 0, 0)
-    };
-  }
-
-  const preparedSlides = slides
-    .map(normalizeSlide)
-    .filter((slide) => slide.enabled);
-
-  function ensureOverlay() {
-    if (!stage) {
-      return null;
-    }
-
-    let overlay = stage.querySelector('.transition-overlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'transition-overlay';
-      stage.appendChild(overlay);
-      logDebug('Overlay created', {});
-    }
-
-    return overlay;
-  }
-
-  function clearNodeRuntime(node) {
-    if (!node) {
-      return;
-    }
-
-    if (node._websiteState?.timeoutHandle) {
-      clearTimeout(node._websiteState.timeoutHandle);
-      node._websiteState.timeoutHandle = null;
-    }
-
-    if (node._websiteState?.refreshHandle) {
-      clearInterval(node._websiteState.refreshHandle);
-      node._websiteState.refreshHandle = null;
-    }
-  }
-
-  function clearTimers() {
-    if (currentTimer) {
-      clearTimeout(currentTimer);
-      currentTimer = null;
-    }
-
-    if (clockInterval) {
-      clearInterval(clockInterval);
-      clockInterval = null;
-    }
-
-    clearNodeRuntime(currentNode);
-  }
-
-  function makeBaseSlide(slide) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'slide';
-    wrapper.dataset.id = slide.id;
-    wrapper.dataset.type = slide.type;
-    wrapper.style.background = slide.bg || defaultBackground;
-
-    const inner = document.createElement('div');
-    inner.className = 'slide-inner';
-
-    wrapper.appendChild(inner);
-
-    return { wrapper, inner };
-  }
-
-  function renderImageSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    inner.classList.add(slide.fit === 'cover' ? 'media-cover' : 'media-contain');
-
-    const img = document.createElement('img');
-    img.src = slide.file;
-    img.alt = slide.title || '';
-    img.loading = 'eager';
-
-    inner.appendChild(img);
-
-    return wrapper;
-  }
-
-  function renderVideoSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    inner.classList.add(slide.fit === 'cover' ? 'media-cover' : 'media-contain');
-
-    const video = document.createElement('video');
-    video.src = slide.file;
-    video.autoplay = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-
-    inner.appendChild(video);
-
-    return wrapper;
-  }
-
-  function renderPdfSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const embed = document.createElement('embed');
-    embed.src = slide.file;
-    embed.type = 'application/pdf';
-    embed.className = 'pdf-frame';
-
-    inner.appendChild(embed);
-
-    return wrapper;
-  }
-
-  function withCacheBuster(url) {
-    if (!url) {
-      return '';
-    }
-
-    try {
-      const parsed = new URL(url, window.location.href);
-      parsed.searchParams.set('_ifsr', String(Date.now()));
-      return parsed.toString();
-    } catch (error) {
-      const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}_ifsr=${Date.now()}`;
-    }
-  }
-
-  function renderWebsiteSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const iframe = document.createElement('iframe');
-    iframe.src = slide.url || 'about:blank';
-    iframe.className = 'website-frame';
-    iframe.loading = 'eager';
-    iframe.referrerPolicy = 'no-referrer';
-
-    wrapper._websiteState = {
-      iframe,
-      loaded: false,
-      timedOut: false,
-      timeoutHandle: null,
-      refreshHandle: null,
-      timeoutSeconds: slide.timeout,
-      refreshSeconds: slide.refreshSeconds,
-      originalUrl: slide.url || ''
-    };
-
-    inner.appendChild(iframe);
-
-    return wrapper;
-  }
-
-  function renderClockSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    inner.classList.add('clock-slide');
-    inner.style.background = clockBackground;
-    inner.style.color = clockTextColor;
-
-    const logoPath = slide.clock?.logo || clockLogo || '';
-    const showLogo = slide.clock?.showLogo === true && !!logoPath;
-
-    if (showLogo) {
-      const logo = document.createElement('img');
-      logo.src = logoPath;
-      logo.alt = 'Logo';
-      logo.className = 'clock-logo';
-      logo.style.height = `${clockLogoHeight}px`;
-      logo.style.maxHeight = `${clockLogoHeight}px`;
-      logo.style.width = 'auto';
-      inner.appendChild(logo);
-    }
-
-    const timeEl = document.createElement('div');
-    timeEl.className = 'clock-time';
-
-    const dateEl = document.createElement('div');
-    dateEl.className = 'clock-date';
-
-    inner.appendChild(timeEl);
-    inner.appendChild(dateEl);
-
-    wrapper._clockElements = { timeEl, dateEl };
-
-    return wrapper;
-  }
-
-  function renderFallbackSlide(slide) {
-    const { wrapper, inner } = makeBaseSlide(slide);
-
-    const note = document.createElement('div');
-    note.className = 'fallback-note';
-    note.textContent = `Unbekannter oder unvollständiger Slide-Typ: ${slide.type}`;
-
-    inner.appendChild(note);
-
-    return wrapper;
-  }
-
-  function createSlideNode(slide) {
-    switch (slide.type) {
-      case 'image':
-        return renderImageSlide(slide);
-      case 'video':
-        return renderVideoSlide(slide);
-      case 'pdf':
-        return renderPdfSlide(slide);
-      case 'website':
-        return renderWebsiteSlide(slide);
-      case 'clock':
-        return clockEnabled ? renderClockSlide(slide) : renderFallbackSlide(slide);
-      default:
-        return renderFallbackSlide(slide);
-    }
-  }
-
-  function updateClock(node) {
-    if (!node || !node._clockElements) {
-      return;
-    }
-
-    const now = new Date();
-    const timeOptions = {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: clockTimezone
-    };
-
-    if (clockShowSeconds) {
-      timeOptions.second = '2-digit';
-    }
-
-    const timeText = new Intl.DateTimeFormat('de-AT', timeOptions).format(now);
-    const dateText = new Intl.DateTimeFormat('de-AT', {
-      weekday: 'long',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: clockTimezone
-    }).format(now);
-
-    node._clockElements.timeEl.textContent = timeText;
-    node._clockElements.dateEl.textContent = dateText;
-  }
-
-  function advanceToNextSlide() {
-    if (!preparedSlides.length) {
-      return;
-    }
-
-    const nextIndex = (currentIndex + 1) % preparedSlides.length;
-    logDebug('Advance to next slide', { currentIndex, nextIndex });
-    showSlide(nextIndex);
-  }
-
-  function setupWebsiteRuntime(node, slide) {
-    const websiteState = node?._websiteState;
-    if (!websiteState) {
-      return;
-    }
-
-    const { iframe } = websiteState;
-
-    if (!websiteState.originalUrl) {
-      logDebug('Website-Slide ohne URL wird übersprungen.', {
-        slideId: slide.id,
-        title: slide.title
-      });
-      advanceToNextSlide();
-      return;
-    }
-
-    const markLoaded = () => {
-      if (websiteState.timedOut) {
+(function () {
+    'use strict';
+
+    const config = window.APP_CONFIG || {};
+    const playlist = window.APP_PLAYLIST || {};
+    const slides = Array.isArray(playlist.slides) ? playlist.slides.slice() : [];
+
+    const layerA = document.getElementById('slide-layer-a');
+    const layerB = document.getElementById('slide-layer-b');
+    const rootOverlay = document.getElementById('transition-overlay-root');
+
+    if (!layerA || !layerB || !rootOverlay) {
+        console.error('[player] missing required DOM nodes');
         return;
-      }
+    }
 
-      websiteState.loaded = true;
+    const enabledSlides = slides
+        .filter((slide) => slide && slide.enabled !== false)
+        .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0));
 
-      if (websiteState.timeoutHandle) {
-        clearTimeout(websiteState.timeoutHandle);
-        websiteState.timeoutHandle = null;
-      }
+    let activeLayer = layerA;
+    let standbyLayer = layerB;
+    let currentIndex = -1;
+    let slideTimer = null;
+    let videoEndHandler = null;
+    let clockInterval = null;
 
-      logDebug('Website-Slide geladen.', {
-        slideId: slide.id,
-        title: slide.title,
-        url: websiteState.originalUrl
-      });
-    };
+    function trace(message) {
+        const line = '[player] ' + message;
+        console.log(line);
+    }
 
-    const markFailedAndSkip = (reason) => {
-      if (websiteState.timedOut) {
-        return;
-      }
-
-      websiteState.timedOut = true;
-
-      if (websiteState.timeoutHandle) {
-        clearTimeout(websiteState.timeoutHandle);
-        websiteState.timeoutHandle = null;
-      }
-
-      if (websiteState.refreshHandle) {
-        clearInterval(websiteState.refreshHandle);
-        websiteState.refreshHandle = null;
-      }
-
-      node.dataset.websiteState = reason;
-
-      logDebug('Website-Slide fehlgeschlagen, nächster Slide wird geladen.', {
-        slideId: slide.id,
-        title: slide.title,
-        url: websiteState.originalUrl,
-        reason
-      });
-
-      advanceToNextSlide();
-    };
-
-    iframe.addEventListener(
-      'load',
-      () => {
-        markLoaded();
-      },
-      { once: true }
-    );
-
-    iframe.addEventListener(
-      'error',
-      () => {
-        markFailedAndSkip('error');
-      },
-      { once: true }
-    );
-
-    websiteState.timeoutHandle = window.setTimeout(() => {
-      if (!websiteState.loaded) {
-        markFailedAndSkip('timeout');
-      }
-    }, websiteState.timeoutSeconds * 1000);
-
-    if (websiteState.refreshSeconds > 0) {
-      websiteState.refreshHandle = window.setInterval(() => {
-        if (websiteState.timedOut || !node.classList.contains('active')) {
-          return;
+    function cleanupLayer(layer) {
+        if (!layer) {
+            return;
         }
 
-        logDebug('Website-Slide wird neu geladen.', {
-          slideId: slide.id,
-          title: slide.title,
-          url: websiteState.originalUrl,
-          refreshSeconds: websiteState.refreshSeconds
-        });
-
-        websiteState.loaded = false;
-
-        if (websiteState.timeoutHandle) {
-          clearTimeout(websiteState.timeoutHandle);
+        if (videoEndHandler) {
+            const video = layer.querySelector('video');
+            if (video) {
+                video.removeEventListener('ended', videoEndHandler);
+            }
+            videoEndHandler = null;
         }
 
-        websiteState.timeoutHandle = window.setTimeout(() => {
-          if (!websiteState.loaded) {
-            markFailedAndSkip('timeout_after_refresh');
-          }
-        }, websiteState.timeoutSeconds * 1000);
+        if (clockInterval) {
+            clearInterval(clockInterval);
+            clockInterval = null;
+        }
 
-        iframe.src = withCacheBuster(websiteState.originalUrl);
-      }, websiteState.refreshSeconds * 1000);
-    }
-  }
-
-  function activateNode(node, slide) {
-    if (!stage) {
-      return;
+        layer.innerHTML = '';
+        layer.classList.remove('slide-layer--cover', 'slide-layer--contain');
     }
 
-    stage.appendChild(node);
-    node.classList.add('active');
-
-    logDebug('Node activated', {
-      slideId: slide.id,
-      type: slide.type,
-      title: slide.title,
-      fade: slide.fade,
-      duration: slide.duration
-    });
-
-    if (slide.type === 'clock') {
-      updateClock(node);
-      clockInterval = setInterval(() => updateClock(node), 1000);
+    function normalizeDuration(slide) {
+        const value = Number(slide && slide.duration);
+        if (Number.isFinite(value) && value > 0) {
+            return value;
+        }
+        return 10;
     }
 
-    if (slide.type === 'video') {
-      const video = node.querySelector('video');
-      if (video) {
+    function normalizeFade(slide) {
+        const value = Number(slide && slide.fade);
+        if (Number.isFinite(value) && value >= 0) {
+            return value;
+        }
+        return 1.2;
+    }
+
+    function getFitClass(slide) {
+        const fit = String((slide && slide.fit) || 'contain').toLowerCase();
+        return fit === 'cover' ? 'slide-layer--cover' : 'slide-layer--contain';
+    }
+
+    function resolveSlideType(slide) {
+        const type = String((slide && slide.type) || '').toLowerCase();
+        if (type) {
+            return type;
+        }
+
+        const file = String((slide && slide.file) || '').toLowerCase();
+        if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(file)) {
+            return 'image';
+        }
+        if (/\.(mp4|webm|ogg|mov|m4v)$/.test(file)) {
+            return 'video';
+        }
+        if (/\.pdf$/.test(file)) {
+            return 'pdf';
+        }
+        return 'website';
+    }
+
+    function setLayerBackground(layer, slide) {
+        const bg = String((slide && slide.bg) || '#000000');
+        layer.style.background = bg;
+    }
+
+    function showRootOverlay() {
+        rootOverlay.classList.add('is-visible');
+        trace('Overlay visible ON (root)');
+    }
+
+    function hideRootOverlay() {
+        rootOverlay.classList.remove('is-visible');
+        trace('Overlay visible OFF (root)');
+    }
+
+    function formatDate(date) {
+        try {
+            return new Intl.DateTimeFormat('de-AT', {
+                weekday: 'long',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            }).format(date);
+        } catch (err) {
+            return date.toLocaleDateString();
+        }
+    }
+
+    function formatTime(date) {
+        try {
+            return new Intl.DateTimeFormat('de-AT', {
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        } catch (err) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+    }
+
+    function buildClockSlide(layer) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'slide-clock';
+
+        const inner = document.createElement('div');
+        inner.className = 'slide-clock__inner';
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'slide-clock__time';
+
+        const dateEl = document.createElement('div');
+        dateEl.className = 'slide-clock__date';
+
+        function updateClock() {
+            const now = new Date();
+            timeEl.textContent = formatTime(now);
+            dateEl.textContent = formatDate(now);
+        }
+
+        updateClock();
+        clockInterval = window.setInterval(updateClock, 1000);
+
+        inner.appendChild(timeEl);
+        inner.appendChild(dateEl);
+        wrapper.appendChild(inner);
+        layer.appendChild(wrapper);
+    }
+
+    function buildMessageSlide(layer, text) {
+        const message = document.createElement('div');
+        message.className = 'slide-message';
+        message.textContent = text;
+        layer.appendChild(message);
+    }
+
+    function renderImageSlide(layer, slide) {
+        const img = document.createElement('img');
+        img.src = slide.file || '';
+        img.alt = slide.title || '';
+        img.loading = 'eager';
+        layer.appendChild(img);
+    }
+
+    function renderVideoSlide(layer, slide) {
+        const video = document.createElement('video');
+        video.src = slide.file || '';
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+
+        videoEndHandler = function () {
+            trace('Video ended');
+            nextSlide();
+        };
+
+        video.addEventListener('ended', videoEndHandler);
+        layer.appendChild(video);
+
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(() => {});
+            playPromise.catch((err) => {
+                trace('Video autoplay failed: ' + err.message);
+            });
         }
-      }
     }
 
-    if (slide.type === 'website') {
-      setupWebsiteRuntime(node, slide);
-    }
-  }
-
-  function cleanupOldSlides(keepNode, overlay) {
-    const nodes = Array.from(stage.querySelectorAll('.slide'));
-    const removed = [];
-
-    nodes.forEach((node) => {
-      if (node === keepNode) {
-        return;
-      }
-      removed.push({
-        id: node.dataset.id || '',
-        type: node.dataset.type || '',
-      });
-      clearNodeRuntime(node);
-      node.remove();
-    });
-
-    logDebug('Old slides cleaned up', {
-      keepId: keepNode?.dataset?.id || '',
-      removed
-    });
-
-    if (overlay && overlay.parentNode === stage) {
-      stage.appendChild(overlay);
-    }
-  }
-
-  function runOverlayTransition(nextNode, fadeSeconds) {
-    const overlay = ensureOverlay();
-    if (!overlay) {
-      cleanupOldSlides(nextNode, null);
-      return;
+    function renderWebsiteSlide(layer, slide) {
+        const iframe = document.createElement('iframe');
+        iframe.src = slide.url || slide.file || '';
+        iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+        iframe.setAttribute('allow', 'autoplay; fullscreen');
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+        layer.appendChild(iframe);
     }
 
-    const token = ++transitionToken;
-    const fadeMs = Math.max(0, Number(fadeSeconds) || 0) * 1000;
-    const halfFadeMs = Math.max(500, Math.round(fadeMs / 2));
+    function renderPdfSlide(layer, slide) {
+        const iframe = document.createElement('iframe');
+        iframe.src = slide.file || '';
+        iframe.setAttribute('title', slide.title || 'PDF');
+        layer.appendChild(iframe);
+    }
 
-    overlay.style.transition = `opacity ${halfFadeMs}ms linear`;
-    overlay.classList.remove('visible');
-    void overlay.offsetWidth;
+    function renderSlideIntoLayer(layer, slide) {
+        cleanupLayer(layer);
+        setLayerBackground(layer, slide);
+        layer.classList.add(getFitClass(slide));
 
-    logDebug('Overlay transition start', {
-      token,
-      fadeSeconds,
-      fadeMs,
-      halfFadeMs
-    });
+        const type = resolveSlideType(slide);
+        trace('Render slide type=' + type + ' title=' + String(slide.title || ''));
 
-    window.setTimeout(() => {
-      if (token !== transitionToken) {
-        logDebug('Overlay transition aborted before fade-in', { token, transitionToken });
-        return;
-      }
+        switch (type) {
+            case 'image':
+                renderImageSlide(layer, slide);
+                break;
 
-      overlay.classList.add('visible');
-      logDebug('Overlay visible ON', { token });
+            case 'video':
+                renderVideoSlide(layer, slide);
+                break;
 
-      window.setTimeout(() => {
-        if (token !== transitionToken) {
-          logDebug('Overlay transition aborted before cleanup', { token, transitionToken });
-          return;
+            case 'website':
+                renderWebsiteSlide(layer, slide);
+                break;
+
+            case 'pdf':
+                renderPdfSlide(layer, slide);
+                break;
+
+            case 'clock':
+                buildClockSlide(layer);
+                break;
+
+            default:
+                buildMessageSlide(layer, 'Unbekannter Slide-Typ: ' + type);
+                break;
+        }
+    }
+
+    function activateLayer(layer) {
+        activeLayer.classList.remove('is-active');
+        activeLayer.classList.remove('is-next');
+
+        standbyLayer.classList.remove('is-active');
+        standbyLayer.classList.remove('is-next');
+
+        layer.classList.add('is-active');
+
+        if (layer === layerA) {
+            activeLayer = layerA;
+            standbyLayer = layerB;
+        } else {
+            activeLayer = layerB;
+            standbyLayer = layerA;
+        }
+    }
+
+    function scheduleNextSlide(slide) {
+        if (slideTimer) {
+            clearTimeout(slideTimer);
+            slideTimer = null;
         }
 
-        cleanupOldSlides(nextNode, overlay);
+        if (!slide) {
+            return;
+        }
 
-        overlay.classList.remove('visible');
-        logDebug('Overlay visible OFF', { token });
-      }, halfFadeMs + 300);
-    }, 100);
-  }
+        const type = resolveSlideType(slide);
+        if (type === 'video') {
+            return;
+        }
 
-  function showSlide(index) {
-    clearTimers();
-
-    if (!preparedSlides.length || !stage) {
-      if (stage) {
-        stage.innerHTML = 'Keine aktiven Slides vorhanden.';
-      }
-      return;
+        const durationMs = Math.max(1000, normalizeDuration(slide) * 1000);
+        slideTimer = window.setTimeout(nextSlide, durationMs);
     }
 
-    const slide = preparedSlides[index];
-    const node = createSlideNode(slide);
+    function performTransition(nextSlideData) {
+        const fadeMs = Math.max(0, normalizeFade(nextSlideData) * 1000);
 
-    logDebug('Show slide called', {
-      index,
-      slideId: slide.id,
-      type: slide.type,
-      title: slide.title,
-      fade: slide.fade,
-      duration: slide.duration
-    });
+        trace('Overlay transition start');
 
-    activateNode(node, slide);
-    runOverlayTransition(node, slide.fade);
+        renderSlideIntoLayer(standbyLayer, nextSlideData);
+        standbyLayer.classList.add('is-next');
 
-    currentNode = node;
-    currentIndex = index;
+        showRootOverlay();
 
-    const nextDelay = Math.max(1, slide.duration) * 1000;
-
-    currentTimer = window.setTimeout(() => {
-      advanceToNextSlide();
-    }, nextDelay);
-  }
-
-  function startPlayer() {
-    if (!preparedSlides.length) {
-      if (stage) {
-        stage.innerHTML = 'Keine aktiven Slides vorhanden.';
-      }
-      return;
+        window.setTimeout(() => {
+            activateLayer(standbyLayer);
+            hideRootOverlay();
+            cleanupLayer(standbyLayer);
+            trace('Overlay transition complete');
+            scheduleNextSlide(nextSlideData);
+        }, fadeMs);
     }
 
-    logDebug('Player started', {
-      slidesTotal: preparedSlides.length
+    function nextSlide() {
+        if (!enabledSlides.length) {
+            cleanupLayer(activeLayer);
+            cleanupLayer(standbyLayer);
+            buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
+            activeLayer.classList.add('is-active');
+            return;
+        }
+
+        currentIndex = (currentIndex + 1) % enabledSlides.length;
+        const slide = enabledSlides[currentIndex];
+        performTransition(slide);
+    }
+
+    function start() {
+        if (!enabledSlides.length) {
+            buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
+            activeLayer.classList.add('is-active');
+            return;
+        }
+
+        const firstSlide = enabledSlides[0];
+        currentIndex = 0;
+
+        trace('Player start');
+        renderSlideIntoLayer(activeLayer, firstSlide);
+        activeLayer.classList.add('is-active');
+        scheduleNextSlide(firstSlide);
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        trace('Visibility changed: ' + document.visibilityState);
     });
 
-    showSlide(0);
-  }
+    window.addEventListener('beforeunload', function () {
+        if (slideTimer) {
+            clearTimeout(slideTimer);
+        }
+        if (clockInterval) {
+            clearInterval(clockInterval);
+        }
+    });
 
-  startPlayer();
+    start();
 })();
