@@ -135,11 +135,11 @@ body {
 .transition-overlay {
   position: absolute;
   inset: 0;
-  z-index: 50;
+  z-index: 9999;
   opacity: 0;
   pointer-events: none;
-  background: #ffffff;
-  transition: opacity 0.2s ease;
+  background: #000000;
+  transition: opacity 0.2s linear;
 }
 
 .transition-overlay.visible {
