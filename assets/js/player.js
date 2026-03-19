@@ -34,12 +34,32 @@
     screen.style.background = defaultBackground;
   }
 
+  function sendLog(level, message, context = {}) {
+    try {
+      fetch('client_log.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level,
+          message,
+          context,
+        }),
+        keepalive: true,
+        cache: 'no-store',
+      }).catch(() => {});
+    } catch (_) {
+      // logging must never break playback
+    }
+  }
+
   function logDebug(message, extra = null) {
     if (extra !== null) {
       console.info(`[infoscreen2] ${message}`, extra);
+      sendLog('DEBUG', message, extra);
       return;
     }
     console.info(`[infoscreen2] ${message}`);
+    sendLog('DEBUG', message, {});
   }
 
   function normalizePositiveNumber(value, fallback) {
@@ -85,6 +105,7 @@
       overlay = document.createElement('div');
       overlay.className = 'transition-overlay';
       stage.appendChild(overlay);
+      logDebug('Overlay created', {});
     }
 
     return overlay;
@@ -319,6 +340,7 @@
     }
 
     const nextIndex = (currentIndex + 1) % preparedSlides.length;
+    logDebug('Advance to next slide', { currentIndex, nextIndex });
     showSlide(nextIndex);
   }
 
@@ -447,6 +469,14 @@
     stage.appendChild(node);
     node.classList.add('active');
 
+    logDebug('Node activated', {
+      slideId: slide.id,
+      type: slide.type,
+      title: slide.title,
+      fade: slide.fade,
+      duration: slide.duration
+    });
+
     if (slide.type === 'clock') {
       updateClock(node);
       clockInterval = setInterval(() => updateClock(node), 1000);
@@ -469,12 +499,23 @@
 
   function cleanupOldSlides(keepNode, overlay) {
     const nodes = Array.from(stage.querySelectorAll('.slide'));
+    const removed = [];
+
     nodes.forEach((node) => {
       if (node === keepNode) {
         return;
       }
+      removed.push({
+        id: node.dataset.id || '',
+        type: node.dataset.type || '',
+      });
       clearNodeRuntime(node);
       node.remove();
+    });
+
+    logDebug('Old slides cleaned up', {
+      keepId: keepNode?.dataset?.id || '',
+      removed
     });
 
     if (overlay && overlay.parentNode === stage) {
@@ -491,29 +532,40 @@
 
     const token = ++transitionToken;
     const fadeMs = Math.max(0, Number(fadeSeconds) || 0) * 1000;
-    const halfFadeMs = Math.max(120, Math.round(fadeMs / 2));
+    const halfFadeMs = Math.max(500, Math.round(fadeMs / 2));
 
-    overlay.style.transition = `opacity ${halfFadeMs}ms ease`;
+    overlay.style.transition = `opacity ${halfFadeMs}ms linear`;
     overlay.classList.remove('visible');
     void overlay.offsetWidth;
 
+    logDebug('Overlay transition start', {
+      token,
+      fadeSeconds,
+      fadeMs,
+      halfFadeMs
+    });
+
     window.setTimeout(() => {
       if (token !== transitionToken) {
+        logDebug('Overlay transition aborted before fade-in', { token, transitionToken });
         return;
       }
 
       overlay.classList.add('visible');
+      logDebug('Overlay visible ON', { token });
 
       window.setTimeout(() => {
         if (token !== transitionToken) {
+          logDebug('Overlay transition aborted before cleanup', { token, transitionToken });
           return;
         }
 
         cleanupOldSlides(nextNode, overlay);
 
         overlay.classList.remove('visible');
-      }, halfFadeMs + 20);
-    }, 20);
+        logDebug('Overlay visible OFF', { token });
+      }, halfFadeMs + 300);
+    }, 100);
   }
 
   function showSlide(index) {
@@ -528,6 +580,15 @@
 
     const slide = preparedSlides[index];
     const node = createSlideNode(slide);
+
+    logDebug('Show slide called', {
+      index,
+      slideId: slide.id,
+      type: slide.type,
+      title: slide.title,
+      fade: slide.fade,
+      duration: slide.duration
+    });
 
     activateNode(node, slide);
     runOverlayTransition(node, slide.fade);
@@ -549,6 +610,10 @@
       }
       return;
     }
+
+    logDebug('Player started', {
+      slidesTotal: preparedSlides.length
+    });
 
     showSlide(0);
   }
