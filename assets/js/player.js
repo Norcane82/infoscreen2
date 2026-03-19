@@ -24,6 +24,8 @@
     let slideTimer = null;
     let videoEndHandler = null;
     let clockInterval = null;
+    let transitionToken = 0;
+    let isTransitioning = false;
 
     function trace(message) {
         const line = '[player] ' + message;
@@ -35,13 +37,11 @@
             return;
         }
 
-        if (videoEndHandler) {
-            const video = layer.querySelector('video');
-            if (video) {
-                video.removeEventListener('ended', videoEndHandler);
-            }
-            videoEndHandler = null;
+        const video = layer.querySelector('video');
+        if (video && videoEndHandler) {
+            video.removeEventListener('ended', videoEndHandler);
         }
+        videoEndHandler = null;
 
         if (clockInterval) {
             clearInterval(clockInterval);
@@ -49,7 +49,14 @@
         }
 
         layer.innerHTML = '';
-        layer.classList.remove('slide-layer--cover', 'slide-layer--contain');
+        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next');
+    }
+
+    function clearSlideTimer() {
+        if (slideTimer) {
+            clearTimeout(slideTimer);
+            slideTimer = null;
+        }
     }
 
     function normalizeDuration(slide) {
@@ -95,16 +102,6 @@
     function setLayerBackground(layer, slide) {
         const bg = String((slide && slide.bg) || '#000000');
         layer.style.background = bg;
-    }
-
-    function showRootOverlay() {
-        rootOverlay.classList.add('is-visible');
-        trace('Overlay visible ON (root)');
-    }
-
-    function hideRootOverlay() {
-        rootOverlay.classList.remove('is-visible');
-        trace('Overlay visible OFF (root)');
     }
 
     function formatDate(date) {
@@ -250,11 +247,8 @@
     }
 
     function activateLayer(layer) {
-        activeLayer.classList.remove('is-active');
-        activeLayer.classList.remove('is-next');
-
-        standbyLayer.classList.remove('is-active');
-        standbyLayer.classList.remove('is-next');
+        layerA.classList.remove('is-active', 'is-next');
+        layerB.classList.remove('is-active', 'is-next');
 
         layer.classList.add('is-active');
 
@@ -267,11 +261,21 @@
         }
     }
 
-    function scheduleNextSlide(slide) {
-        if (slideTimer) {
-            clearTimeout(slideTimer);
-            slideTimer = null;
+    function setOverlayPhase(phase) {
+        rootOverlay.classList.remove('is-visible', 'is-hold');
+        if (phase === 'fade-in') {
+            rootOverlay.classList.add('is-visible');
+            trace('Overlay visible ON (root fade-in)');
+        } else if (phase === 'hold') {
+            rootOverlay.classList.add('is-visible', 'is-hold');
+            trace('Overlay hold (root)');
+        } else if (phase === 'fade-out') {
+            trace('Overlay visible OFF (root fade-out)');
         }
+    }
+
+    function scheduleNextSlide(slide) {
+        clearSlideTimer();
 
         if (!slide) {
             return;
@@ -287,25 +291,79 @@
     }
 
     function performTransition(nextSlideData) {
-        const fadeMs = Math.max(0, normalizeFade(nextSlideData) * 1000);
+        const myToken = ++transitionToken;
+        clearSlideTimer();
+        isTransitioning = true;
 
-        trace('Overlay transition start');
+        const totalFadeMs = Math.max(180, Math.round(normalizeFade(nextSlideData) * 1000));
+        const fadeInMs = Math.max(80, Math.round(totalFadeMs * 0.38));
+        const holdMs = Math.max(40, Math.round(totalFadeMs * 0.18));
+        const fadeOutMs = Math.max(80, totalFadeMs - fadeInMs - holdMs);
+
+        trace(
+            'Overlay transition start total=' +
+            totalFadeMs +
+            ' in=' +
+            fadeInMs +
+            ' hold=' +
+            holdMs +
+            ' out=' +
+            fadeOutMs
+        );
 
         renderSlideIntoLayer(standbyLayer, nextSlideData);
-        standbyLayer.classList.add('is-next');
-
-        showRootOverlay();
 
         window.setTimeout(() => {
-            activateLayer(standbyLayer);
-            hideRootOverlay();
-            cleanupLayer(standbyLayer);
-            trace('Overlay transition complete');
-            scheduleNextSlide(nextSlideData);
-        }, fadeMs);
+            if (myToken !== transitionToken) {
+                return;
+            }
+
+            setOverlayPhase('fade-in');
+
+            window.setTimeout(() => {
+                if (myToken !== transitionToken) {
+                    return;
+                }
+
+                setOverlayPhase('hold');
+                standbyLayer.classList.add('is-next');
+
+                window.setTimeout(() => {
+                    if (myToken !== transitionToken) {
+                        return;
+                    }
+
+                    activateLayer(standbyLayer);
+
+                    window.setTimeout(() => {
+                        if (myToken !== transitionToken) {
+                            return;
+                        }
+
+                        setOverlayPhase('fade-out');
+
+                        window.setTimeout(() => {
+                            if (myToken !== transitionToken) {
+                                return;
+                            }
+
+                            cleanupLayer(standbyLayer);
+                            isTransitioning = false;
+                            trace('Overlay transition complete');
+                            scheduleNextSlide(nextSlideData);
+                        }, fadeOutMs);
+                    }, 30);
+                }, holdMs);
+            }, fadeInMs);
+        }, 20);
     }
 
     function nextSlide() {
+        if (isTransitioning) {
+            trace('Skip nextSlide because transition is active');
+            return;
+        }
+
         if (!enabledSlides.length) {
             cleanupLayer(activeLayer);
             cleanupLayer(standbyLayer);
@@ -340,11 +398,11 @@
     });
 
     window.addEventListener('beforeunload', function () {
-        if (slideTimer) {
-            clearTimeout(slideTimer);
-        }
+        clearSlideTimer();
+
         if (clockInterval) {
             clearInterval(clockInterval);
+            clockInterval = null;
         }
     });
 
