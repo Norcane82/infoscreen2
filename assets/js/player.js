@@ -71,7 +71,13 @@
         });
 
         layer.innerHTML = '';
-        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next', 'is-active');
+        layer.classList.remove(
+            'slide-layer--cover',
+            'slide-layer--contain',
+            'is-active',
+            'is-entering',
+            'is-exiting'
+        );
         layer.style.background = '#000000';
         layer.style.transitionDuration = '';
     }
@@ -280,52 +286,55 @@
         slideTimer = window.setTimeout(nextSlide, durationMs);
     }
 
-    function finishCrossfade(myToken, oldLayer, nextLayer, nextSlideData, fadeMs) {
+    function completeTransition(token, oldLayer, newLayer, slide, fadeMs) {
         window.setTimeout(() => {
-            if (myToken !== transitionToken) {
+            if (token !== transitionToken) {
                 return;
             }
 
             cleanupLayer(oldLayer);
-            nextLayer.classList.remove('is-next');
-            nextLayer.classList.add('is-active');
 
-            activeLayer = nextLayer;
+            newLayer.classList.remove('is-entering');
+            newLayer.classList.add('is-active');
+
+            activeLayer = newLayer;
             standbyLayer = oldLayer;
             isTransitioning = false;
 
             trace('Crossfade transition complete');
-            scheduleNextSlide(nextSlideData);
+            scheduleNextSlide(slide);
         }, fadeMs + 80);
     }
 
     function performTransition(nextSlideData) {
-        const myToken = ++transitionToken;
+        const token = ++transitionToken;
         isTransitioning = true;
         clearSlideTimer();
 
         const oldLayer = activeLayer;
-        const nextLayer = standbyLayer;
+        const newLayer = standbyLayer;
         const fadeMs = Math.max(180, Math.round(normalizeFade(nextSlideData) * 1000));
 
         trace('Crossfade transition start fade=' + fadeMs);
 
-        renderSlideIntoLayer(nextLayer, nextSlideData);
+        renderSlideIntoLayer(newLayer, nextSlideData);
 
-        oldLayer.classList.remove('is-next');
+        oldLayer.classList.remove('is-entering', 'is-exiting');
         oldLayer.classList.add('is-active');
-        nextLayer.classList.remove('is-active', 'is-next');
+
+        newLayer.classList.remove('is-active', 'is-entering', 'is-exiting');
 
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                if (myToken !== transitionToken) {
+                if (token !== transitionToken) {
                     return;
                 }
 
-                nextLayer.classList.add('is-next');
+                newLayer.classList.add('is-entering');
                 oldLayer.classList.remove('is-active');
+                oldLayer.classList.add('is-exiting');
 
-                finishCrossfade(myToken, oldLayer, nextLayer, nextSlideData, fadeMs);
+                completeTransition(token, oldLayer, newLayer, nextSlideData, fadeMs);
             });
         });
     }
