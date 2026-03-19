@@ -21,11 +21,10 @@
     let standbyLayer = layerB;
     let currentIndex = -1;
     let slideTimer = null;
+    let videoEndHandler = null;
     let clockIntervals = new WeakMap();
-    let videoHandlers = new WeakMap();
     let transitionToken = 0;
     let isTransitioning = false;
-    let hasStartedPlayback = false;
 
     function trace(message) {
         console.log('[player] ' + message);
@@ -46,29 +45,12 @@
         }
     }
 
-    function clearLayerVideoHandlers(layer) {
-        const handlers = videoHandlers.get(layer);
-        if (!handlers) {
-            return;
-        }
-
-        const videos = layer.querySelectorAll('video');
-        videos.forEach((video) => {
-            if (handlers.ended) {
-                video.removeEventListener('ended', handlers.ended);
-            }
-        });
-
-        videoHandlers.delete(layer);
-    }
-
     function cleanupLayer(layer) {
         if (!layer) {
             return;
         }
 
         clearLayerClock(layer);
-        clearLayerVideoHandlers(layer);
 
         const videos = layer.querySelectorAll('video');
         videos.forEach((video) => {
@@ -77,9 +59,10 @@
             } catch (err) {
                 // ignore
             }
-
+            if (videoEndHandler) {
+                video.removeEventListener('ended', videoEndHandler);
+            }
             video.removeAttribute('src');
-
             try {
                 video.load();
             } catch (err) {
@@ -219,14 +202,12 @@
         video.playsInline = true;
         video.preload = 'auto';
 
-        const endedHandler = function () {
+        videoEndHandler = function () {
             trace('Video ended');
             nextSlide();
         };
 
-        video.addEventListener('ended', endedHandler);
-        videoHandlers.set(layer, { ended: endedHandler });
-
+        video.addEventListener('ended', videoEndHandler);
         layer.appendChild(video);
 
         const playPromise = video.play();
@@ -306,7 +287,6 @@
             }
 
             cleanupLayer(oldLayer);
-
             nextLayer.classList.remove('is-next');
             nextLayer.classList.add('is-active');
 
@@ -334,7 +314,6 @@
 
         oldLayer.classList.remove('is-next');
         oldLayer.classList.add('is-active');
-
         nextLayer.classList.remove('is-active', 'is-next');
 
         requestAnimationFrame(() => {
@@ -399,8 +378,6 @@
         clearSlideTimer();
         clearLayerClock(layerA);
         clearLayerClock(layerB);
-        clearLayerVideoHandlers(layerA);
-        clearLayerVideoHandlers(layerB);
     });
 
     start();
