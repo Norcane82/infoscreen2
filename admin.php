@@ -13,7 +13,7 @@ $restartData = read_json_file(DATA_DIR . '/restart_log.json', [
     'restarts' => [],
     'fallback_active' => false,
     'consecutive_failures' => 0,
-    'last_action' => 'none'
+    'last_action' => 'none',
 ]);
 
 $fallbackText = '';
@@ -22,11 +22,20 @@ if (is_file($fallbackFile)) {
     $fallbackText = trim((string)file_get_contents($fallbackFile));
 }
 
-function slideTypeLabel(array $item): string {
+$cleanupMessage = '';
+if (isset($_GET['cleanup'])) {
+    $deleted = (int)($_GET['deleted'] ?? 0);
+    $kept = (int)($_GET['kept'] ?? 0);
+    $cleanupMessage = 'Aufräumen abgeschlossen. Gelöscht: ' . $deleted . ' | Behalten: ' . $kept;
+}
+
+function slideTypeLabel(array $item): string
+{
     $type = strtolower((string)($item['type'] ?? ''));
     if ($type === 'image' && (($item['sourceType'] ?? '') === 'pdf')) {
         return 'PDF-Seite';
     }
+
     $map = [
         'clock' => 'Uhr',
         'image' => 'Bild',
@@ -34,6 +43,7 @@ function slideTypeLabel(array $item): string {
         'website' => 'Webseite',
         'pdf' => 'PDF',
     ];
+
     return $map[$type] ?? $type;
 }
 ?>
@@ -66,11 +76,16 @@ th{font-size:12px;text-transform:uppercase;color:#64748b}
 .editRow{display:none;background:#f8fafc}
 code{background:#eef2ff;padding:2px 6px;border-radius:6px}
 .statusLine{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.notice{background:#ecfeff;border:1px solid #a5f3fc;color:#155e75;padding:12px 14px;border-radius:10px;margin-bottom:16px}
 </style>
 </head>
 <body>
 
 <h1>Infoscreen2 Verwaltung</h1>
+
+<?php if ($cleanupMessage !== ''): ?>
+<div class="notice"><?= h($cleanupMessage) ?></div>
+<?php endif; ?>
 
 <div class="toolbar" style="margin-bottom:16px">
   <a class="btn secondary" href="index.php" target="_blank">Player öffnen</a>
@@ -91,7 +106,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
     <form action="fallback_toggle.php" method="post"><input type="hidden" name="mode" value="off"><button class="secondary" type="submit">Fallback deaktivieren</button></form>
     <form action="run_watchdog.php" method="post"><button class="secondary" type="submit">Watchdog jetzt ausführen</button></form>
     <form action="backup.php" method="post"><button class="secondary" type="submit">Backup erstellen</button></form>
-    <form action="cleanup_uploads.php" method="post"><button class="danger" type="submit">Verwaiste Dateien aufräumen</button></form>
+    <form action="cleanup_orphans.php" method="post"><button class="danger" type="submit">Verwaiste Dateien aufräumen</button></form>
   </div>
 </div>
 
@@ -257,9 +272,10 @@ function toggleEdit(id){
   if(!el)return;
   el.style.display=(el.style.display==='table-row')?'none':'table-row';
 }
+
 async function refreshLiveStatus(){
   try{
-    const r=await fetch('status.php?_=' + Date.now());
+    const r=await fetch('status.php?_=' + Date.now(), {cache:'no-store'});
     const j=await r.json();
     const el=document.getElementById('liveStatus');
     if(!el)return;
@@ -269,8 +285,9 @@ async function refreshLiveStatus(){
     if(el) el.textContent='Live-Status konnte nicht geladen werden';
   }
 }
+
 refreshLiveStatus();
-setInterval(refreshLiveStatus, 10000);
+setInterval(refreshLiveStatus, 60000);
 </script>
 
 </body>
