@@ -88,13 +88,7 @@
         });
 
         layer.innerHTML = '';
-        layer.classList.remove(
-            'slide-layer--cover',
-            'slide-layer--contain',
-            'is-next',
-            'is-active',
-            'is-leaving'
-        );
+        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next', 'is-active');
         layer.style.background = '#000000';
         layer.style.transitionDuration = '';
     }
@@ -313,7 +307,7 @@
 
             cleanupLayer(oldLayer);
 
-            nextLayer.classList.remove('is-next', 'is-leaving');
+            nextLayer.classList.remove('is-next');
             nextLayer.classList.add('is-active');
 
             activeLayer = nextLayer;
@@ -338,10 +332,10 @@
 
         renderSlideIntoLayer(nextLayer, nextSlideData);
 
-        oldLayer.classList.remove('is-next', 'is-leaving');
+        oldLayer.classList.remove('is-next');
         oldLayer.classList.add('is-active');
 
-        nextLayer.classList.remove('is-active', 'is-next', 'is-leaving');
+        nextLayer.classList.remove('is-active', 'is-next');
 
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -351,7 +345,6 @@
 
                 nextLayer.classList.add('is-next');
                 oldLayer.classList.remove('is-active');
-                oldLayer.classList.add('is-leaving');
 
                 finishCrossfade(myToken, oldLayer, nextLayer, nextSlideData, fadeMs);
             });
