@@ -113,7 +113,7 @@ body {
     object-fit: contain;
 }
 
-/* Root-Overlay bleibt nur als Reserve im DOM, aber ohne sichtbaren Effekt */
+/* Root-Overlay bleibt nur für Reserve/Diagnose im DOM, aber unsichtbar */
 .transition-overlay-root {
     position: fixed;
     inset: 0;
