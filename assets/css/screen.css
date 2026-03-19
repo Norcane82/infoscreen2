@@ -35,28 +35,33 @@ body {
   visibility: hidden;
   pointer-events: none;
   z-index: 0;
-  transition: opacity 1s ease, visibility 0s linear 1s;
   background-position: center center;
   background-repeat: no-repeat;
   will-change: opacity;
+  backface-visibility: hidden;
 }
 
+.slide.is-prepared,
 .slide.active,
 .slide.leaving {
   visibility: visible;
+}
+
+.slide.is-prepared {
+  opacity: 0;
+  z-index: 2;
 }
 
 .slide.active {
   opacity: 1;
   pointer-events: auto;
   z-index: 2;
-  transition: opacity 1s ease, visibility 0s linear 0s;
 }
 
 .slide.leaving {
   opacity: 0;
+  pointer-events: none;
   z-index: 1;
-  transition: opacity 1s ease, visibility 0s linear 1s;
 }
 
 .slide-inner {
