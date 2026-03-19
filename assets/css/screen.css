@@ -32,37 +32,18 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: 0;
-  visibility: hidden;
+  opacity: 1;
+  visibility: visible;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background-position: center center;
   background-repeat: no-repeat;
-  will-change: opacity;
   backface-visibility: hidden;
   transform: translateZ(0);
 }
 
-.slide.is-prepared,
-.slide.active,
-.slide.leaving {
-  visibility: visible;
-}
-
-.slide.is-prepared {
-  opacity: 0;
-  z-index: 3;
-}
-
 .slide.active {
-  opacity: 1;
   pointer-events: auto;
-  z-index: 2;
-}
-
-.slide.leaving {
-  opacity: 0;
-  pointer-events: none;
   z-index: 1;
 }
 
@@ -149,4 +130,17 @@ body {
   text-align: center;
   font-size: 2rem;
   color: #333333;
+}
+
+.transition-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  background: #ffffff;
+}
+
+.transition-overlay.visible {
+  opacity: 1;
 }
