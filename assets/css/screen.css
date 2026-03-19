@@ -107,7 +107,6 @@ body {
     object-fit: contain;
 }
 
-/* echtes Root-Overlay */
 .transition-overlay-root {
     position: fixed;
     inset: 0;
@@ -117,19 +116,23 @@ body {
     visibility: hidden;
     background: #000;
     transition:
-        opacity 160ms linear,
-        visibility 0s linear 160ms;
+        opacity 260ms linear,
+        visibility 0s linear 260ms;
+    will-change: opacity;
 }
 
 .transition-overlay-root.is-visible {
     opacity: 1;
     visibility: visible;
     transition:
-        opacity 160ms linear,
+        opacity 260ms linear,
         visibility 0s linear 0s;
 }
 
-/* optionale Diagnoseebene */
+.transition-overlay-root.is-hold {
+    transition: none !important;
+}
+
 .root-overlay-diagnostic {
     position: fixed;
     inset: 0;
@@ -241,6 +244,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .transition-overlay-root,
     .transition-overlay-root.is-visible,
+    .transition-overlay-root.is-hold,
     .root-overlay-diagnostic,
     .root-overlay-diagnostic.is-visible,
     .slide-layer {
