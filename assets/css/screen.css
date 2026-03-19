@@ -1,58 +1,67 @@
 html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, Helvetica, sans-serif;
-    background: #ffffff;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
 }
 
 body {
-    background: #ffffff;
+  background: #ffffff;
 }
 
 .screen {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    background: #ffffff;
-    overflow: hidden;
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #ffffff;
+  overflow: hidden;
 }
 
 .slide-stage {
-    position: relative;
-    width: 100%;
-    height: 100%;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .slide {
-    position: absolute;
-    inset: 0;
-    display: none;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 1s ease;
-    background-position: center center;
-    background-repeat: no-repeat;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 1s ease, visibility 0s linear 1s;
+  background-position: center center;
+  background-repeat: no-repeat;
+  will-change: opacity;
+}
+
+.slide.active,
+.slide.leaving {
+  visibility: visible;
 }
 
 .slide.active {
-    display: block;
-    opacity: 1;
-    z-index: 2;
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 2;
+  transition: opacity 1s ease, visibility 0s linear 0s;
 }
 
 .slide.leaving {
-    display: block;
-    opacity: 0;
-    z-index: 1;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 1s ease, visibility 0s linear 1s;
 }
 
 .slide-inner {
-    width: 100%;
-    height: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .slide img,
@@ -60,76 +69,77 @@ body {
 .slide iframe,
 .slide object,
 .slide embed {
-    width: 100%;
-    height: 100%;
-    border: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
 }
 
 .media-contain img,
 .media-contain video,
 .media-contain object,
 .media-contain embed {
-    object-fit: contain;
-    background: transparent;
+  object-fit: contain;
+  background: transparent;
 }
 
 .media-cover img,
 .media-cover video {
-    object-fit: cover;
+  object-fit: cover;
 }
 
 .clock-slide {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    text-align: center;
-    color: #111111;
-    background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  color: #111111;
+  background: #ffffff;
 }
 
 .clock-time {
-    font-size: 12vw;
-    line-height: 1;
-    font-weight: bold;
-    letter-spacing: 0.04em;
+  font-size: 12vw;
+  line-height: 1;
+  font-weight: bold;
+  letter-spacing: 0.04em;
 }
 
 .clock-date {
-    margin-top: 2vh;
-    font-size: 3vw;
-    line-height: 1.2;
+  margin-top: 2vh;
+  font-size: 3vw;
+  line-height: 1.2;
 }
 
 .clock-logo {
-    position: absolute;
-    top: 32px;
-    left: 32px;
-    max-width: 18vw;
-    max-height: 14vh;
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  max-width: 18vw;
+  max-height: 14vh;
 }
 
 .website-frame {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    background: #ffffff;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #ffffff;
 }
 
 .pdf-frame {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    background: #ffffff;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #ffffff;
 }
 
 .fallback-note {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    padding: 40px;
-    text-align: center;
-    font-size: 2rem;
-    color: #333333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  font-size: 2rem;
+  color: #333333;
 }
