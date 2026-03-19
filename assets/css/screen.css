@@ -139,6 +139,7 @@ body {
   opacity: 0;
   pointer-events: none;
   background: #ffffff;
+  transition: opacity 0.2s ease;
 }
 
 .transition-overlay.visible {
