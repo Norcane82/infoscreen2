@@ -23,33 +23,12 @@
     let currentIndex = -1;
     let slideTimer = null;
     let videoEndHandler = null;
-    let clockInterval = null;
+    let clockIntervals = new WeakMap();
     let transitionToken = 0;
     let isTransitioning = false;
 
     function trace(message) {
-        const line = '[player] ' + message;
-        console.log(line);
-    }
-
-    function cleanupLayer(layer) {
-        if (!layer) {
-            return;
-        }
-
-        const video = layer.querySelector('video');
-        if (video && videoEndHandler) {
-            video.removeEventListener('ended', videoEndHandler);
-        }
-        videoEndHandler = null;
-
-        if (clockInterval) {
-            clearInterval(clockInterval);
-            clockInterval = null;
-        }
-
-        layer.innerHTML = '';
-        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next');
+        console.log('[player] ' + message);
     }
 
     function clearSlideTimer() {
@@ -57,6 +36,44 @@
             clearTimeout(slideTimer);
             slideTimer = null;
         }
+    }
+
+    function clearLayerClock(layer) {
+        const intervalId = clockIntervals.get(layer);
+        if (intervalId) {
+            clearInterval(intervalId);
+            clockIntervals.delete(layer);
+        }
+    }
+
+    function cleanupLayer(layer) {
+        if (!layer) {
+            return;
+        }
+
+        clearLayerClock(layer);
+
+        const videos = layer.querySelectorAll('video');
+        videos.forEach((video) => {
+            try {
+                video.pause();
+            } catch (err) {
+                // ignore
+            }
+            if (videoEndHandler) {
+                video.removeEventListener('ended', videoEndHandler);
+            }
+            video.removeAttribute('src');
+            try {
+                video.load();
+            } catch (err) {
+                // ignore
+            }
+        });
+
+        layer.innerHTML = '';
+        layer.classList.remove('slide-layer--cover', 'slide-layer--contain', 'is-next', 'is-active');
+        layer.style.background = '#000000';
     }
 
     function normalizeDuration(slide) {
@@ -128,6 +145,11 @@
         }
     }
 
+    function setOverlayVisible(visible) {
+        rootOverlay.classList.toggle('is-visible', visible);
+        trace(visible ? 'Overlay visible ON (root)' : 'Overlay visible OFF (root)');
+    }
+
     function buildClockSlide(layer) {
         const wrapper = document.createElement('div');
         wrapper.className = 'slide-clock';
@@ -148,7 +170,8 @@
         }
 
         updateClock();
-        clockInterval = window.setInterval(updateClock, 1000);
+        const intervalId = window.setInterval(updateClock, 1000);
+        clockIntervals.set(layer, intervalId);
 
         inner.appendChild(timeEl);
         inner.appendChild(dateEl);
@@ -223,54 +246,35 @@
             case 'image':
                 renderImageSlide(layer, slide);
                 break;
-
             case 'video':
                 renderVideoSlide(layer, slide);
                 break;
-
             case 'website':
                 renderWebsiteSlide(layer, slide);
                 break;
-
             case 'pdf':
                 renderPdfSlide(layer, slide);
                 break;
-
             case 'clock':
                 buildClockSlide(layer);
                 break;
-
             default:
                 buildMessageSlide(layer, 'Unbekannter Slide-Typ: ' + type);
                 break;
         }
     }
 
-    function activateLayer(layer) {
+    function activateLayer(nextLayer) {
         layerA.classList.remove('is-active', 'is-next');
         layerB.classList.remove('is-active', 'is-next');
+        nextLayer.classList.add('is-active');
 
-        layer.classList.add('is-active');
-
-        if (layer === layerA) {
+        if (nextLayer === layerA) {
             activeLayer = layerA;
             standbyLayer = layerB;
         } else {
             activeLayer = layerB;
             standbyLayer = layerA;
-        }
-    }
-
-    function setOverlayPhase(phase) {
-        rootOverlay.classList.remove('is-visible', 'is-hold');
-        if (phase === 'fade-in') {
-            rootOverlay.classList.add('is-visible');
-            trace('Overlay visible ON (root fade-in)');
-        } else if (phase === 'hold') {
-            rootOverlay.classList.add('is-visible', 'is-hold');
-            trace('Overlay hold (root)');
-        } else if (phase === 'fade-out') {
-            trace('Overlay visible OFF (root fade-out)');
         }
     }
 
@@ -281,8 +285,7 @@
             return;
         }
 
-        const type = resolveSlideType(slide);
-        if (type === 'video') {
+        if (resolveSlideType(slide) === 'video') {
             return;
         }
 
@@ -292,68 +295,58 @@
 
     function performTransition(nextSlideData) {
         const myToken = ++transitionToken;
-        clearSlideTimer();
         isTransitioning = true;
+        clearSlideTimer();
 
+        const oldLayer = activeLayer;
+        const nextLayer = standbyLayer;
         const totalFadeMs = Math.max(180, Math.round(normalizeFade(nextSlideData) * 1000));
-        const fadeInMs = Math.max(80, Math.round(totalFadeMs * 0.38));
-        const holdMs = Math.max(40, Math.round(totalFadeMs * 0.18));
-        const fadeOutMs = Math.max(80, totalFadeMs - fadeInMs - holdMs);
+        const fadeInMs = Math.max(90, Math.round(totalFadeMs * 0.5));
+        const fadeOutMs = Math.max(90, totalFadeMs - fadeInMs);
 
         trace(
             'Overlay transition start total=' +
             totalFadeMs +
             ' in=' +
             fadeInMs +
-            ' hold=' +
-            holdMs +
             ' out=' +
             fadeOutMs
         );
 
-        renderSlideIntoLayer(standbyLayer, nextSlideData);
+        renderSlideIntoLayer(nextLayer, nextSlideData);
 
         window.setTimeout(() => {
             if (myToken !== transitionToken) {
                 return;
             }
 
-            setOverlayPhase('fade-in');
+            setOverlayVisible(true);
 
             window.setTimeout(() => {
                 if (myToken !== transitionToken) {
                     return;
                 }
 
-                setOverlayPhase('hold');
-                standbyLayer.classList.add('is-next');
+                activateLayer(nextLayer);
 
                 window.setTimeout(() => {
                     if (myToken !== transitionToken) {
                         return;
                     }
 
-                    activateLayer(standbyLayer);
+                    setOverlayVisible(false);
 
                     window.setTimeout(() => {
                         if (myToken !== transitionToken) {
                             return;
                         }
 
-                        setOverlayPhase('fade-out');
-
-                        window.setTimeout(() => {
-                            if (myToken !== transitionToken) {
-                                return;
-                            }
-
-                            cleanupLayer(standbyLayer);
-                            isTransitioning = false;
-                            trace('Overlay transition complete');
-                            scheduleNextSlide(nextSlideData);
-                        }, fadeOutMs);
-                    }, 30);
-                }, holdMs);
+                        cleanupLayer(oldLayer);
+                        isTransitioning = false;
+                        trace('Overlay transition complete');
+                        scheduleNextSlide(nextSlideData);
+                    }, fadeOutMs + 30);
+                }, 30);
             }, fadeInMs);
         }, 20);
     }
@@ -365,8 +358,8 @@
         }
 
         if (!enabledSlides.length) {
-            cleanupLayer(activeLayer);
-            cleanupLayer(standbyLayer);
+            cleanupLayer(layerA);
+            cleanupLayer(layerB);
             buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
             activeLayer.classList.add('is-active');
             return;
@@ -399,11 +392,8 @@
 
     window.addEventListener('beforeunload', function () {
         clearSlideTimer();
-
-        if (clockInterval) {
-            clearInterval(clockInterval);
-            clockInterval = null;
-        }
+        clearLayerClock(layerA);
+        clearLayerClock(layerB);
     });
 
     start();
