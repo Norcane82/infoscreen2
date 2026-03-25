@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
@@ -17,6 +18,8 @@ function load_health_state(): array
         'fallback_active' => false,
         'consecutive_failures' => 0,
         'last_action' => 'none',
+        'requested_view' => 'index',
+        'reload_requested_at' => 0,
     ]);
 }
 
@@ -25,24 +28,27 @@ function save_health_state(array $state): void
     write_json_file(HEALTH_FILE, $state);
 }
 
-function restart_player_process(): void
+function request_player_refresh(string $requestedView, string $lastAction): void
 {
-    @shell_exec('/usr/local/bin/infoscreen2-restart-player.sh >/dev/null 2>&1 &');
+    $state = load_health_state();
+    $state['last_action'] = $lastAction;
+    $state['requested_view'] = $requestedView;
+    $state['reload_requested_at'] = time();
+    save_health_state($state);
+
+    if (function_exists('app_log')) {
+        app_log('info', 'Player refresh requested', [
+            'requested_view' => $requestedView,
+            'last_action' => $lastAction,
+        ]);
+    }
 }
 
 $action = trim((string)($_POST['action'] ?? ''));
 $fallbackFile = __DIR__ . '/cache/fallback_active.flag';
 
 if ($action === 'restart_player') {
-    $state = load_health_state();
-    $state['last_action'] = 'manual_restart_player';
-    save_health_state($state);
-
-    if (function_exists('log_message')) {
-        log_message('INFO', 'Manual action: player restart');
-    }
-
-    restart_player_process();
+    request_player_refresh('index', 'manual_restart_player');
     redirect_admin_player_action();
 }
 
@@ -57,14 +63,17 @@ if ($action === 'fallback_on') {
 
     $state = load_health_state();
     $state['fallback_active'] = true;
+    $state['requested_view'] = 'fallback';
+    $state['reload_requested_at'] = time();
     $state['last_action'] = 'manual_fallback_on';
     save_health_state($state);
 
-    if (function_exists('log_message')) {
-        log_message('INFO', 'Manual action: fallback enabled');
+    if (function_exists('app_log')) {
+        app_log('info', 'Manual fallback enabled', [
+            'requested_view' => 'fallback',
+        ]);
     }
 
-    restart_player_process();
     redirect_admin_player_action();
 }
 
@@ -76,14 +85,17 @@ if ($action === 'fallback_off') {
     $state = load_health_state();
     $state['fallback_active'] = false;
     $state['consecutive_failures'] = 0;
+    $state['requested_view'] = 'index';
+    $state['reload_requested_at'] = time();
     $state['last_action'] = 'manual_fallback_off';
     save_health_state($state);
 
-    if (function_exists('log_message')) {
-        log_message('INFO', 'Manual action: fallback disabled');
+    if (function_exists('app_log')) {
+        app_log('info', 'Manual fallback disabled', [
+            'requested_view' => 'index',
+        ]);
     }
 
-    restart_player_process();
     redirect_admin_player_action();
 }
 
