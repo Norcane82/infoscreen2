@@ -16,48 +16,78 @@
         return nextView !== currentView;
     }
 
+    function safeNumber(value) {
+        var n = Number(value || 0);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function navigateTo(viewName, reloadAt) {
+        handledReloadAt = safeNumber(reloadAt);
+        window.location.replace(targetUrlForView(viewName) + '?_=' + handledReloadAt);
+    }
+
+    function handleStatusPayload(data) {
+        if (!data || data.ok !== true) {
+            return;
+        }
+
+        var requestedView = String(data.requested_view || 'index');
+        var reloadRequestedAt = safeNumber(data.reload_requested_at);
+
+        if (shouldRedirect(requestedView)) {
+            navigateTo(requestedView, reloadRequestedAt);
+            return;
+        }
+
+        if (reloadRequestedAt > handledReloadAt) {
+            navigateTo(requestedView, reloadRequestedAt);
+        }
+    }
+
     function fetchStatus() {
+        var xhr;
+
         if (isBusy) {
             return;
         }
 
         isBusy = true;
+        xhr = new XMLHttpRequest();
 
-        fetch(statusUrl + '?_=' + Date.now(), {
-            cache: 'no-store',
-            credentials: 'same-origin'
-        })
-            .then(function (response) {
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status);
-                }
-                return response.json();
-            })
-            .then(function (data) {
-                if (!data || data.ok !== true) {
-                    return;
-                }
+        xhr.onreadystatechange = function () {
+            var data;
 
-                var requestedView = String(data.requested_view || 'index');
-                var reloadRequestedAt = Number(data.reload_requested_at || 0);
+            if (xhr.readyState !== 4) {
+                return;
+            }
 
-                if (shouldRedirect(requestedView)) {
-                    handledReloadAt = reloadRequestedAt;
-                    window.location.replace(targetUrlForView(requestedView) + '?_=' + reloadRequestedAt);
-                    return;
-                }
+            isBusy = false;
 
-                if (reloadRequestedAt > handledReloadAt) {
-                    handledReloadAt = reloadRequestedAt;
-                    window.location.replace(targetUrlForView(requestedView) + '?_=' + reloadRequestedAt);
-                }
-            })
-            .catch(function () {
-                // absichtlich still: der Player soll bei kurzem Statusfehler weiterlaufen
-            })
-            .finally(function () {
-                isBusy = false;
-            });
+            if (xhr.status < 200 || xhr.status >= 300) {
+                return;
+            }
+
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (err) {
+                return;
+            }
+
+            handleStatusPayload(data);
+        };
+
+        xhr.onerror = function () {
+            isBusy = false;
+        };
+
+        try {
+            xhr.open('GET', statusUrl + '?_=' + Date.now(), true);
+            xhr.setRequestHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            xhr.setRequestHeader('Pragma', 'no-cache');
+            xhr.send();
+        } catch (err) {
+            isBusy = false;
+        }
     }
 
     function startPolling() {
