@@ -3,32 +3,54 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
 
-$logFile = __DIR__ . '/data/logs/app.log';
+$availableLogs = [
+    'app' => [
+        'label' => 'App Log',
+        'file' => __DIR__ . '/data/logs/app.log',
+        'mode' => 'jsonl',
+    ],
+    'trace' => [
+        'label' => 'Player Trace Log',
+        'file' => __DIR__ . '/data/logs/player_trace.log',
+        'mode' => 'plain',
+    ],
+];
+
+$selectedKey = (string)($_GET['file'] ?? 'app');
+if (!isset($availableLogs[$selectedKey])) {
+    $selectedKey = 'app';
+}
+
+$selectedLog = $availableLogs[$selectedKey];
+$logFile = $selectedLog['file'];
 $entries = [];
 
 if (is_file($logFile)) {
     $lines = @file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if (is_array($lines)) {
         foreach ($lines as $line) {
-            $decoded = json_decode($line, true);
+            if ($selectedLog['mode'] === 'jsonl') {
+                $decoded = json_decode($line, true);
 
-            if (is_array($decoded)) {
-                $entries[] = [
-                    'time' => (string)($decoded['time'] ?? ''),
-                    'level' => strtoupper((string)($decoded['level'] ?? 'INFO')),
-                    'message' => (string)($decoded['message'] ?? ''),
-                    'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
-                    'raw' => $line,
-                ];
-            } else {
-                $entries[] = [
-                    'time' => '',
-                    'level' => 'RAW',
-                    'message' => $line,
-                    'context' => [],
-                    'raw' => $line,
-                ];
+                if (is_array($decoded)) {
+                    $entries[] = [
+                        'time' => (string)($decoded['time'] ?? ''),
+                        'level' => strtoupper((string)($decoded['level'] ?? 'INFO')),
+                        'message' => (string)($decoded['message'] ?? ''),
+                        'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
+                        'raw' => $line,
+                    ];
+                    continue;
+                }
             }
+
+            $entries[] = [
+                'time' => '',
+                'level' => 'RAW',
+                'message' => $line,
+                'context' => [],
+                'raw' => $line,
+            ];
         }
     }
 }
@@ -97,10 +119,12 @@ code{background:#111827;padding:2px 6px;border-radius:6px}
 
 <div class="toolbar">
   <a class="btn" href="admin.php">Zurück zur Verwaltung</a>
-  <a class="btn" href="view_log.php">Neu laden</a>
+  <a class="btn" href="view_log.php?file=app">App Log</a>
+  <a class="btn" href="view_log.php?file=trace">Player Trace Log</a>
+  <a class="btn" href="view_log.php?file=<?= h($selectedKey) ?>">Neu laden</a>
 </div>
 
-<h1>App Log</h1>
+<h1><?= h($selectedLog['label']) ?></h1>
 <p class="small">Datei: <code><?= h($logFile) ?></code></p>
 <p class="small">Angezeigt werden die letzten <?= count($entries) ?> Einträge.</p>
 
@@ -141,6 +165,10 @@ code{background:#111827;padding:2px 6px;border-radius:6px}
         </details>
       <?php else: ?>
         <p class="small" style="margin-top:10px">Kein Kontext vorhanden.</p>
+        <details style="margin-top:10px">
+          <summary class="small">Rohen Eintrag anzeigen</summary>
+          <pre><?= h($entry['raw']) ?></pre>
+        </details>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
