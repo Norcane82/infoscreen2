@@ -6,6 +6,15 @@ require_once __DIR__ . '/inc/playlist.php';
 
 $config = load_config();
 $playlist = playlist_load_normalized();
+$health = read_json_file(HEALTH_FILE, [
+    'last_restart' => 0,
+    'restarts' => [],
+    'fallback_active' => false,
+    'consecutive_failures' => 0,
+    'last_action' => 'none',
+    'requested_view' => 'index',
+    'reload_requested_at' => 0,
+]);
 
 $slides = array_values(array_filter(
     $playlist['slides'] ?? [],
@@ -24,6 +33,7 @@ $buildTs = (string) max(
     @filemtime(__FILE__) ?: 0,
     @filemtime(__DIR__ . '/assets/css/screen.css') ?: 0,
     @filemtime(__DIR__ . '/assets/js/player.js') ?: 0,
+    @filemtime(__DIR__ . '/assets/js/runtime_sync.js') ?: 0,
     time()
 );
 ?>
@@ -58,10 +68,18 @@ $buildTs = (string) max(
         window.APP_CONFIG = <?php
         echo json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         ?>;
+
         window.APP_PLAYLIST = <?php
         echo json_encode($playlist, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         ?>;
+
+        window.APP_RUNTIME = {
+            currentView: 'index',
+            statusUrl: 'status.php',
+            reloadRequestedAt: <?php echo (int)($health['reload_requested_at'] ?? 0); ?>
+        };
     </script>
     <script src="assets/js/player.js?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="assets/js/runtime_sync.js?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </body>
 </html>
