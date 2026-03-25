@@ -44,6 +44,42 @@ function request_player_refresh_after_move(): void
     }
 }
 
+function detect_move_direction(): string
+{
+    $candidates = [
+        $_POST['dir'] ?? '',
+        $_POST['direction'] ?? '',
+        $_POST['move'] ?? '',
+        $_POST['move_dir'] ?? '',
+        $_GET['dir'] ?? '',
+        $_GET['direction'] ?? '',
+        $_GET['move'] ?? '',
+        $_GET['move_dir'] ?? '',
+    ];
+
+    foreach ($candidates as $candidate) {
+        $dir = strtolower(trim((string)$candidate));
+        if (in_array($dir, ['up', 'down'], true)) {
+            return $dir;
+        }
+    }
+
+    if (isset($_POST['up']) || isset($_GET['up'])) {
+        return 'up';
+    }
+
+    if (isset($_POST['down']) || isset($_GET['down'])) {
+        return 'down';
+    }
+
+    $action = strtolower(trim((string)($_POST['action'] ?? $_GET['action'] ?? '')));
+    if (in_array($action, ['up', 'down'], true)) {
+        return $action;
+    }
+
+    return '';
+}
+
 function build_slide_groups(array $slides): array
 {
     $groups = [];
@@ -103,8 +139,8 @@ function group_contains_slide(array $group, string $slideId): bool
     return false;
 }
 
-$id = trim((string)($_POST['id'] ?? ''));
-$dir = trim((string)($_POST['dir'] ?? ''));
+$id = trim((string)($_POST['id'] ?? $_GET['id'] ?? ''));
+$dir = detect_move_direction();
 
 $playlistData = playlist_load_normalized();
 $slides = array_values($playlistData['slides'] ?? []);
@@ -114,6 +150,8 @@ if ($id === '' || !in_array($dir, ['up', 'down'], true)) {
         app_log('error', 'Move slide aborted: invalid input', [
             'id' => $id,
             'dir' => $dir,
+            'post_keys' => array_keys($_POST),
+            'get_keys' => array_keys($_GET),
         ]);
     }
     redirect_admin_move();
