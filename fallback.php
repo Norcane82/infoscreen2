@@ -21,7 +21,7 @@ $text = is_file($flag)
 
 $buildTs = (string) max(
     @filemtime(__FILE__) ?: 0,
-    @filemtime(__DIR__ . '/assets/js/runtime_sync.js') ?: 0,
+    @filemtime(__DIR__ . '/assets/runtime_sync.js') ?: 0,
     time()
 );
 ?>
@@ -93,6 +93,6 @@ $buildTs = (string) max(
             reloadRequestedAt: <?= (int)($state['reload_requested_at'] ?? 0) ?>
         };
     </script>
-    <script src="assets/js/runtime_sync.js?v=<?= htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8') ?>"></script>
+    <script src="assets/runtime_sync.js?v=<?= htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8') ?>"></script>
 </body>
 </html>
