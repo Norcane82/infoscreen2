@@ -44,11 +44,35 @@ function request_player_refresh(string $requestedView, string $lastAction): void
     }
 }
 
+function restart_kiosk_service(string $reason): void
+{
+    $script = '/usr/local/bin/infoscreen2-restart-player.sh';
+    $ran = false;
+    $code = null;
+    $output = [];
+
+    if (is_file($script) && is_executable($script)) {
+        exec('sudo ' . escapeshellarg($script) . ' 2>&1', $output, $code);
+        $ran = true;
+    }
+
+    if (function_exists('app_log')) {
+        app_log($code === 0 ? 'info' : 'error', 'Kiosk restart requested', [
+            'reason' => $reason,
+            'script' => $script,
+            'ran' => $ran,
+            'exit_code' => $code,
+            'output' => implode("\n", $output),
+        ]);
+    }
+}
+
 $action = trim((string)($_POST['action'] ?? ''));
 $fallbackFile = __DIR__ . '/cache/fallback_active.flag';
 
 if ($action === 'restart_player') {
     request_player_refresh('index', 'manual_restart_player');
+    restart_kiosk_service('manual_restart_player');
     redirect_admin_player_action();
 }
 
@@ -74,6 +98,7 @@ if ($action === 'fallback_on') {
         ]);
     }
 
+    restart_kiosk_service('manual_fallback_on');
     redirect_admin_player_action();
 }
 
@@ -96,6 +121,7 @@ if ($action === 'fallback_off') {
         ]);
     }
 
+    restart_kiosk_service('manual_fallback_off');
     redirect_admin_player_action();
 }
 
