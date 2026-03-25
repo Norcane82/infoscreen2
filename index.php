@@ -25,6 +25,28 @@ usort($slides, static function (array $a, array $b): int {
     return (int)($a['sort'] ?? 0) <=> (int)($b['sort'] ?? 0);
 });
 
+$screen = $config['screen'] ?? [];
+$clock = $config['clock'] ?? [];
+
+$playerConfig = [
+    'screen' => [
+        'defaultDuration' => (float)($screen['defaultDuration'] ?? 8),
+        'defaultFade' => (float)($screen['defaultFade'] ?? 1),
+        'background' => (string)($screen['background'] ?? '#ffffff'),
+        'fit' => (string)($screen['fit'] ?? 'contain'),
+    ],
+    'clock' => [
+        'enabled' => (bool)($clock['enabled'] ?? true),
+        'defaultDuration' => (float)($clock['defaultDuration'] ?? 10),
+        'timezone' => (string)($clock['timezone'] ?? 'Europe/Vienna'),
+        'background' => (string)($clock['background'] ?? '#ffffff'),
+        'textColor' => (string)($clock['textColor'] ?? '#111111'),
+        'showSeconds' => (bool)($clock['showSeconds'] ?? false),
+        'logo' => (string)($clock['logo'] ?? ''),
+        'logoHeight' => (int)($clock['logoHeight'] ?? 100),
+    ],
+];
+
 app_log('info', 'Player loaded', [
     'slides_total' => count($slides),
 ]);
@@ -33,7 +55,7 @@ $buildTs = (string) max(
     @filemtime(__FILE__) ?: 0,
     @filemtime(__DIR__ . '/assets/css/screen.css') ?: 0,
     @filemtime(__DIR__ . '/assets/js/player.js') ?: 0,
-    @filemtime(__DIR__ . '/assets/js/runtime_sync.js') ?: 0,
+    @filemtime(__DIR__ . '/assets/runtime_sync.js') ?: 0,
     time()
 );
 ?>
@@ -66,11 +88,14 @@ $buildTs = (string) max(
 
     <script>
         window.APP_CONFIG = <?php
-        echo json_encode($config, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode($playerConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         ?>;
 
         window.APP_PLAYLIST = <?php
-        echo json_encode($playlist, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'version' => 2,
+            'slides' => $slides,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         ?>;
 
         window.APP_RUNTIME = {
@@ -79,7 +104,8 @@ $buildTs = (string) max(
             reloadRequestedAt: <?php echo (int)($health['reload_requested_at'] ?? 0); ?>
         };
     </script>
+
     <script src="assets/js/player.js?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>"></script>
-    <script src="assets/js/runtime_sync.js?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>"></script>
+    <script src="assets/runtime_sync.js?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>"></script>
 </body>
 </html>
