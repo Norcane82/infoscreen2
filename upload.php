@@ -1,8 +1,14 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/playlist.php';
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    header('Location: admin.php');
+    exit;
+}
 
 $config = load_config();
 $playlistData = playlist_load_normalized();
@@ -23,6 +29,25 @@ function redirect_admin(): void
 {
     header('Location: admin.php');
     exit;
+}
+
+function request_player_refresh_after_playlist_change(string $action): void
+{
+    $state = read_json_file(HEALTH_FILE, [
+        'last_restart' => 0,
+        'restarts' => [],
+        'fallback_active' => false,
+        'consecutive_failures' => 0,
+        'last_action' => 'none',
+        'requested_view' => 'index',
+        'reload_requested_at' => 0,
+    ]);
+
+    $state['last_action'] = $action;
+    $state['requested_view'] = !empty($state['fallback_active']) ? 'fallback' : 'index';
+    $state['reload_requested_at'] = time();
+
+    write_json_file(HEALTH_FILE, $state);
 }
 
 function sanitize_upload_basename(string $name, string $fallback): string
@@ -64,6 +89,13 @@ function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $out
     exec($cmd, $output, $code);
 
     if ($code !== 0) {
+        if (function_exists('app_log')) {
+            app_log('error', 'PDF render failed', [
+                'file' => $pdfFile,
+                'code' => $code,
+                'output' => implode("\n", $output),
+            ]);
+        }
         return [];
     }
 
@@ -74,6 +106,22 @@ function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $out
 
     natsort($files);
     return array_values($files);
+}
+
+function save_playlist_or_redirect(array $slides, string $successAction): void
+{
+    if (!playlist_save_normalized($slides)) {
+        if (function_exists('app_log')) {
+            app_log('error', 'Playlist save failed after upload', [
+                'slides_count' => count($slides),
+                'action' => $successAction,
+            ]);
+        }
+        redirect_admin();
+    }
+
+    request_player_refresh_after_playlist_change($successAction);
+    redirect_admin();
 }
 
 if ($type === 'website') {
@@ -98,11 +146,10 @@ if ($type === 'website') {
         'timeout' => $timeout,
     ], count($slides), $config);
 
-    playlist_save_normalized($slides);
-    redirect_admin();
+    save_playlist_or_redirect($slides, 'upload_website');
 }
 
-if (empty($_FILES['mediaFile']['name']) || !is_uploaded_file($_FILES['mediaFile']['tmp_name'])) {
+if (empty($_FILES['mediaFile']['name']) || !is_uploaded_file((string)$_FILES['mediaFile']['tmp_name'])) {
     redirect_admin();
 }
 
@@ -141,6 +188,13 @@ $fileName = $base . '_' . date('Ymd_His') . '.' . $ext;
 $target = $targetInfo['dir'] . '/' . $fileName;
 
 if (!move_uploaded_file((string)$_FILES['mediaFile']['tmp_name'], $target)) {
+    if (function_exists('app_log')) {
+        app_log('error', 'Upload move failed', [
+            'target' => $target,
+            'original' => $originalName,
+            'type' => $type,
+        ]);
+    }
     redirect_admin();
 }
 
@@ -160,9 +214,10 @@ if ($type === 'pdf') {
 
     foreach ($renderedFiles as $renderedFile) {
         @chmod($renderedFile, 0664);
-
         $renderedName = basename($renderedFile);
-        $pageTitle = $title !== '' ? ($title . ' - Seite ' . $page) : ($base . ' - Seite ' . $page);
+        $pageTitle = $title !== ''
+            ? ($title . ' - Seite ' . $page)
+            : ($base . ' - Seite ' . $page);
 
         $slides[] = playlist_normalize_slide([
             'id' => uuid_like('pdfimg'),
@@ -184,8 +239,7 @@ if ($type === 'pdf') {
         $page++;
     }
 
-    playlist_save_normalized($slides);
-    redirect_admin();
+    save_playlist_or_redirect($slides, 'upload_pdf');
 }
 
 $item = [
@@ -205,6 +259,5 @@ if ($type === 'video') {
 }
 
 $slides[] = playlist_normalize_slide($item, count($slides), $config);
-playlist_save_normalized($slides);
 
-redirect_admin();
+save_playlist_or_redirect($slides, 'upload_media');
