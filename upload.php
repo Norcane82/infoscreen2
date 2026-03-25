@@ -15,9 +15,14 @@ $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
 
 $type = strtolower(trim((string)($_POST['type'] ?? '')));
+$mode = strtolower(trim((string)($_POST['mode'] ?? '')));
 $title = trim((string)($_POST['title'] ?? ''));
 $duration = max(1, (int)($_POST['duration'] ?? ($config['screen']['defaultDuration'] ?? 8)));
 $enabled = !empty($_POST['enabled']);
+
+if ($mode === 'website' && $type === '') {
+    $type = 'website';
+}
 
 $maxSort = 0;
 foreach ($slides as $item) {
@@ -29,6 +34,13 @@ function redirect_admin(): void
 {
     header('Location: admin.php');
     exit;
+}
+
+function upload_log(string $level, string $message, array $context = []): void
+{
+    if (function_exists('app_log')) {
+        app_log($level, $message, $context);
+    }
 }
 
 function request_player_refresh_after_playlist_change(string $action): void
@@ -89,18 +101,19 @@ function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $out
     exec($cmd, $output, $code);
 
     if ($code !== 0) {
-        if (function_exists('app_log')) {
-            app_log('error', 'PDF render failed', [
-                'file' => $pdfFile,
-                'code' => $code,
-                'output' => implode("\n", $output),
-            ]);
-        }
+        upload_log('error', 'PDF render failed', [
+            'file' => $pdfFile,
+            'code' => $code,
+            'output' => implode("\n", $output),
+        ]);
         return [];
     }
 
     $files = glob($prefix . '-*.png');
     if ($files === false) {
+        upload_log('error', 'PDF render glob failed', [
+            'prefix' => $prefix,
+        ]);
         return [];
     }
 
@@ -111,12 +124,10 @@ function render_pdf_pages_to_png(string $pdfFile, string $outputDir, string $out
 function save_playlist_or_redirect(array $slides, string $successAction): void
 {
     if (!playlist_save_normalized($slides)) {
-        if (function_exists('app_log')) {
-            app_log('error', 'Playlist save failed after upload', [
-                'slides_count' => count($slides),
-                'action' => $successAction,
-            ]);
-        }
+        upload_log('error', 'Playlist save failed after upload', [
+            'slides_count' => count($slides),
+            'action' => $successAction,
+        ]);
         redirect_admin();
     }
 
@@ -124,12 +135,28 @@ function save_playlist_or_redirect(array $slides, string $successAction): void
     redirect_admin();
 }
 
+function upload_error_message(int $errorCode): string
+{
+    return match ($errorCode) {
+        UPLOAD_ERR_OK => 'OK',
+        UPLOAD_ERR_INI_SIZE => 'Datei groesser als upload_max_filesize',
+        UPLOAD_ERR_FORM_SIZE => 'Datei groesser als MAX_FILE_SIZE',
+        UPLOAD_ERR_PARTIAL => 'Datei nur teilweise hochgeladen',
+        UPLOAD_ERR_NO_FILE => 'Keine Datei hochgeladen',
+        UPLOAD_ERR_NO_TMP_DIR => 'Temporäres Verzeichnis fehlt',
+        UPLOAD_ERR_CANT_WRITE => 'Datei konnte nicht auf Datentraeger geschrieben werden',
+        UPLOAD_ERR_EXTENSION => 'Upload durch PHP-Erweiterung gestoppt',
+        default => 'Unbekannter Upload-Fehler',
+    };
+}
+
 if ($type === 'website') {
     $url = trim((string)($_POST['url'] ?? ''));
     $refreshSeconds = max(0, (int)($_POST['refreshSeconds'] ?? 0));
-    $timeout = max(1, (int)($_POST['timeout'] ?? 8));
+    $timeout = max(1, (int)($_POST['timeoutSeconds'] ?? $_POST['timeout'] ?? 8));
 
     if ($url === '') {
+        upload_log('error', 'Website upload aborted: empty URL');
         redirect_admin();
     }
 
@@ -149,11 +176,50 @@ if ($type === 'website') {
     save_playlist_or_redirect($slides, 'upload_website');
 }
 
-if (empty($_FILES['mediaFile']['name']) || !is_uploaded_file((string)$_FILES['mediaFile']['tmp_name'])) {
+if (!isset($_FILES['mediaFile']) || !is_array($_FILES['mediaFile'])) {
+    upload_log('error', 'Upload aborted: mediaFile missing', [
+        'post_keys' => array_keys($_POST),
+        'file_keys' => array_keys($_FILES),
+        'content_length' => (int)($_SERVER['CONTENT_LENGTH'] ?? 0),
+    ]);
     redirect_admin();
 }
 
-$originalName = (string)$_FILES['mediaFile']['name'];
+$fileInfo = $_FILES['mediaFile'];
+$uploadError = (int)($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE);
+
+if ($uploadError !== UPLOAD_ERR_OK) {
+    upload_log('error', 'Upload aborted: PHP upload error', [
+        'error_code' => $uploadError,
+        'error_message' => upload_error_message($uploadError),
+        'name' => (string)($fileInfo['name'] ?? ''),
+        'size' => (int)($fileInfo['size'] ?? 0),
+        'content_length' => (int)($_SERVER['CONTENT_LENGTH'] ?? 0),
+        'upload_max_filesize' => (string)ini_get('upload_max_filesize'),
+        'post_max_size' => (string)ini_get('post_max_size'),
+    ]);
+    redirect_admin();
+}
+
+if (empty($fileInfo['name']) || empty($fileInfo['tmp_name'])) {
+    upload_log('error', 'Upload aborted: file name or tmp_name empty', [
+        'name' => (string)($fileInfo['name'] ?? ''),
+        'tmp_name' => (string)($fileInfo['tmp_name'] ?? ''),
+        'size' => (int)($fileInfo['size'] ?? 0),
+    ]);
+    redirect_admin();
+}
+
+if (!is_uploaded_file((string)$fileInfo['tmp_name'])) {
+    upload_log('error', 'Upload aborted: tmp file is not a valid uploaded file', [
+        'tmp_name' => (string)$fileInfo['tmp_name'],
+        'name' => (string)$fileInfo['name'],
+        'size' => (int)($fileInfo['size'] ?? 0),
+    ]);
+    redirect_admin();
+}
+
+$originalName = (string)$fileInfo['name'];
 $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
 $imageExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
@@ -168,16 +234,29 @@ if (!in_array($type, ['image', 'video', 'pdf'], true)) {
     } elseif (in_array($ext, $pdfExt, true)) {
         $type = 'pdf';
     } else {
+        upload_log('error', 'Upload aborted: unsupported extension', [
+            'original_name' => $originalName,
+            'extension' => $ext,
+            'requested_type' => $type,
+        ]);
         redirect_admin();
     }
 }
 
 $targetInfo = upload_target_for_type($type);
 if ($targetInfo === null) {
+    upload_log('error', 'Upload aborted: unknown target type', [
+        'type' => $type,
+    ]);
     redirect_admin();
 }
 
 if (!in_array($ext, $targetInfo['extensions'], true)) {
+    upload_log('error', 'Upload aborted: extension not allowed for type', [
+        'type' => $type,
+        'extension' => $ext,
+        'allowed' => $targetInfo['extensions'],
+    ]);
     redirect_admin();
 }
 
@@ -187,14 +266,17 @@ $base = sanitize_upload_basename($originalName, $type);
 $fileName = $base . '_' . date('Ymd_His') . '.' . $ext;
 $target = $targetInfo['dir'] . '/' . $fileName;
 
-if (!move_uploaded_file((string)$_FILES['mediaFile']['tmp_name'], $target)) {
-    if (function_exists('app_log')) {
-        app_log('error', 'Upload move failed', [
-            'target' => $target,
-            'original' => $originalName,
-            'type' => $type,
-        ]);
-    }
+if (!move_uploaded_file((string)$fileInfo['tmp_name'], $target)) {
+    upload_log('error', 'Upload move failed', [
+        'target' => $target,
+        'target_dir' => $targetInfo['dir'],
+        'target_dir_exists' => is_dir($targetInfo['dir']),
+        'target_dir_writable' => is_writable($targetInfo['dir']),
+        'original' => $originalName,
+        'type' => $type,
+        'tmp_name' => (string)$fileInfo['tmp_name'],
+        'size' => (int)($fileInfo['size'] ?? 0),
+    ]);
     redirect_admin();
 }
 
@@ -206,6 +288,9 @@ if ($type === 'pdf') {
     $renderedFiles = render_pdf_pages_to_png($target, $renderDir, $renderPrefix);
 
     if ($renderedFiles === []) {
+        upload_log('error', 'Upload aborted: PDF rendered no pages', [
+            'target' => $target,
+        ]);
         redirect_admin();
     }
 
