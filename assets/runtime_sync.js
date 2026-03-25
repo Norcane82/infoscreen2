@@ -12,10 +12,6 @@
         return viewName === 'fallback' ? 'fallback.php' : 'index.php';
     }
 
-    function shouldRedirect(nextView) {
-        return nextView !== currentView;
-    }
-
     function safeNumber(value) {
         var n = Number(value || 0);
         return isNaN(n) ? 0 : n;
@@ -34,7 +30,7 @@
         var requestedView = String(data.requested_view || 'index');
         var reloadRequestedAt = safeNumber(data.reload_requested_at);
 
-        if (shouldRedirect(requestedView)) {
+        if (requestedView !== currentView) {
             navigateTo(requestedView, reloadRequestedAt);
             return;
         }
