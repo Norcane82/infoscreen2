@@ -13,6 +13,17 @@
         return;
     }
 
+    const clockConfig = config.clock || {};
+    const clockEnabled = clockConfig.enabled !== false;
+    const clockBackground = typeof clockConfig.background === 'string' ? clockConfig.background : '#ffffff';
+    const clockTextColor = typeof clockConfig.textColor === 'string' ? clockConfig.textColor : '#111111';
+    const clockShowSeconds = clockConfig.showSeconds === true;
+    const clockLogo = typeof clockConfig.logo === 'string' ? clockConfig.logo : '';
+    const clockLogoHeight = Math.max(20, Math.min(400, Number(clockConfig.logoHeight || 100)));
+    const clockTimezone = typeof clockConfig.timezone === 'string' && clockConfig.timezone !== ''
+        ? clockConfig.timezone
+        : 'Europe/Vienna';
+
     const enabledSlides = slides
         .filter((slide) => slide && slide.enabled !== false)
         .sort((a, b) => Number(a.sort || 0) - Number(b.sort || 0));
@@ -25,9 +36,39 @@
     let clockIntervals = new WeakMap();
     let transitionToken = 0;
     let isTransitioning = false;
+    const logCooldowns = new Map();
 
-    function trace(message) {
-        console.log('[player] ' + message);
+    function sendLog(level, message, context = {}, cooldownKey = '', cooldownMs = 0) {
+        try {
+            const now = Date.now();
+
+            if (cooldownKey && cooldownMs > 0) {
+                const lastAt = logCooldowns.get(cooldownKey) || 0;
+                if (now - lastAt < cooldownMs) {
+                    return;
+                }
+                logCooldowns.set(cooldownKey, now);
+            }
+
+            fetch('client_log.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    level,
+                    message,
+                    context
+                }),
+                keepalive: true,
+                cache: 'no-store'
+            }).catch(() => {});
+        } catch (error) {
+            // logging must never break playback
+        }
+    }
+
+    function trace(message, context = {}, level = 'DEBUG', cooldownKey = '', cooldownMs = 0) {
+        console.log('[player] ' + message, context);
+        sendLog(level, message, context, cooldownKey, cooldownMs);
     }
 
     function clearSlideTimer() {
@@ -59,10 +100,13 @@
             } catch (err) {
                 // ignore
             }
+
             if (videoEndHandler) {
                 video.removeEventListener('ended', videoEndHandler);
             }
+
             video.removeAttribute('src');
+
             try {
                 video.load();
             } catch (err) {
@@ -138,7 +182,8 @@
                 weekday: 'long',
                 day: '2-digit',
                 month: '2-digit',
-                year: 'numeric'
+                year: 'numeric',
+                timeZone: clockTimezone
             }).format(date);
         } catch (err) {
             return date.toLocaleDateString();
@@ -147,27 +192,54 @@
 
     function formatTime(date) {
         try {
-            return new Intl.DateTimeFormat('de-AT', {
+            const options = {
                 hour: '2-digit',
-                minute: '2-digit'
-            }).format(date);
+                minute: '2-digit',
+                timeZone: clockTimezone
+            };
+
+            if (clockShowSeconds) {
+                options.second = '2-digit';
+            }
+
+            return new Intl.DateTimeFormat('de-AT', options).format(date);
         } catch (err) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: clockShowSeconds ? '2-digit' : undefined
+            });
         }
     }
 
     function buildClockSlide(layer) {
         const wrapper = document.createElement('div');
         wrapper.className = 'slide-clock';
+        wrapper.style.background = clockBackground;
+        wrapper.style.color = clockTextColor;
 
         const inner = document.createElement('div');
         inner.className = 'slide-clock__inner';
+        inner.style.color = clockTextColor;
+
+        if (clockLogo) {
+            const logo = document.createElement('img');
+            logo.className = 'clock-logo';
+            logo.src = clockLogo;
+            logo.alt = 'Logo';
+            logo.style.height = String(clockLogoHeight) + 'px';
+            logo.style.maxHeight = String(clockLogoHeight) + 'px';
+            logo.style.width = 'auto';
+            wrapper.appendChild(logo);
+        }
 
         const timeEl = document.createElement('div');
         timeEl.className = 'slide-clock__time';
+        timeEl.style.color = clockTextColor;
 
         const dateEl = document.createElement('div');
         dateEl.className = 'slide-clock__date';
+        dateEl.style.color = clockTextColor;
 
         function updateClock() {
             const now = new Date();
@@ -183,6 +255,14 @@
         inner.appendChild(dateEl);
         wrapper.appendChild(inner);
         layer.appendChild(wrapper);
+
+        trace('Clock slide built', {
+            background: clockBackground,
+            textColor: clockTextColor,
+            logo: clockLogo,
+            logoHeight: clockLogoHeight,
+            showSeconds: clockShowSeconds
+        }, 'INFO', 'clock-built', 5000);
     }
 
     function buildMessageSlide(layer, text) {
@@ -209,7 +289,10 @@
         video.preload = 'auto';
 
         videoEndHandler = function () {
-            trace('Video ended');
+            trace('Video ended', {
+                id: slide.id || '',
+                title: slide.title || ''
+            }, 'INFO', 'video-ended-' + String(slide.id || ''), 1000);
             nextSlide();
         };
 
@@ -219,7 +302,11 @@
         const playPromise = video.play();
         if (playPromise && typeof playPromise.catch === 'function') {
             playPromise.catch((err) => {
-                trace('Video autoplay failed: ' + err.message);
+                trace('Video autoplay failed', {
+                    id: slide.id || '',
+                    title: slide.title || '',
+                    error: err && err.message ? err.message : 'unknown'
+                }, 'WARN', 'video-play-failed-' + String(slide.id || ''), 3000);
             });
         }
     }
@@ -247,7 +334,14 @@
         layer.classList.add(getFitClass(slide));
 
         const type = resolveSlideType(slide);
-        trace('Render slide type=' + type + ' title=' + String(slide.title || ''));
+
+        trace('Render slide', {
+            id: slide.id || '',
+            title: slide.title || '',
+            type,
+            duration: normalizeDuration(slide),
+            fade: normalizeFade(slide)
+        }, 'INFO', 'render-' + String(slide.id || ''), 300);
 
         switch (type) {
             case 'image':
@@ -263,7 +357,11 @@
                 renderPdfSlide(layer, slide);
                 break;
             case 'clock':
-                buildClockSlide(layer);
+                if (clockEnabled) {
+                    buildClockSlide(layer);
+                } else {
+                    buildMessageSlide(layer, 'Uhr ist deaktiviert');
+                }
                 break;
             default:
                 buildMessageSlide(layer, 'Unbekannter Slide-Typ: ' + type);
@@ -301,7 +399,12 @@
             standbyLayer = oldLayer;
             isTransitioning = false;
 
-            trace('Crossfade transition complete');
+            trace('Crossfade transition complete', {
+                id: slide.id || '',
+                title: slide.title || '',
+                fadeMs
+            }, 'INFO', 'transition-complete-' + String(slide.id || ''), 300);
+
             scheduleNextSlide(slide);
         }, fadeMs + 80);
     }
@@ -315,7 +418,11 @@
         const newLayer = standbyLayer;
         const fadeMs = Math.max(180, Math.round(normalizeFade(nextSlideData) * 1000));
 
-        trace('Crossfade transition start fade=' + fadeMs);
+        trace('Crossfade transition start', {
+            id: nextSlideData.id || '',
+            title: nextSlideData.title || '',
+            fadeMs
+        }, 'INFO', 'transition-start-' + String(nextSlideData.id || ''), 300);
 
         renderSlideIntoLayer(newLayer, nextSlideData);
 
@@ -341,7 +448,7 @@
 
     function nextSlide() {
         if (isTransitioning) {
-            trace('Skip nextSlide because transition is active');
+            trace('Skip nextSlide because transition is active', {}, 'DEBUG', 'skip-next-slide', 500);
             return;
         }
 
@@ -350,6 +457,8 @@
             cleanupLayer(layerB);
             buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
             activeLayer.classList.add('is-active');
+
+            trace('No active slides available', {}, 'WARN', 'no-active-slides', 5000);
             return;
         }
 
@@ -359,7 +468,12 @@
         if (currentIndex === 0 && !activeLayer.classList.contains('is-active')) {
             renderSlideIntoLayer(activeLayer, slide);
             activeLayer.classList.add('is-active');
-            trace('Initial slide shown');
+
+            trace('Initial slide shown', {
+                id: slide.id || '',
+                title: slide.title || ''
+            }, 'INFO', 'initial-slide', 1000);
+
             scheduleNextSlide(slide);
             return;
         }
@@ -371,16 +485,22 @@
         if (!enabledSlides.length) {
             buildMessageSlide(activeLayer, 'Keine aktiven Slides vorhanden');
             activeLayer.classList.add('is-active');
+            trace('Player start without slides', {}, 'WARN', 'player-start-empty', 5000);
             return;
         }
 
-        trace('Player start');
+        trace('Player start', {
+            slides_total: enabledSlides.length
+        }, 'INFO', 'player-start', 2000);
+
         currentIndex = -1;
         nextSlide();
     }
 
     document.addEventListener('visibilitychange', function () {
-        trace('Visibility changed: ' + document.visibilityState);
+        trace('Visibility changed', {
+            visibilityState: document.visibilityState
+        }, 'DEBUG', 'visibility-' + String(document.visibilityState), 1000);
     });
 
     window.addEventListener('beforeunload', function () {
