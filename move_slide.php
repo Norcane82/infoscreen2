@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
@@ -10,9 +11,37 @@ function redirect_admin_move(): void
     exit;
 }
 
-function is_pdf_group_slide(array $item): bool
+function load_health_state(): array
 {
-    return (($item['type'] ?? '') === 'image') && (($item['sourceType'] ?? '') === 'pdf');
+    return read_json_file(HEALTH_FILE, [
+        'last_restart' => 0,
+        'restarts' => [],
+        'fallback_active' => false,
+        'consecutive_failures' => 0,
+        'last_action' => 'none',
+        'requested_view' => 'index',
+        'reload_requested_at' => 0,
+    ]);
+}
+
+function save_health_state(array $state): void
+{
+    write_json_file(HEALTH_FILE, $state);
+}
+
+function request_player_refresh_after_move(): void
+{
+    $state = load_health_state();
+    $state['last_action'] = 'move_slide';
+    $state['requested_view'] = !empty($state['fallback_active']) ? 'fallback' : 'index';
+    $state['reload_requested_at'] = time();
+    save_health_state($state);
+
+    if (function_exists('app_log')) {
+        app_log('info', 'Player refresh requested after move', [
+            'requested_view' => $state['requested_view'],
+        ]);
+    }
 }
 
 function build_slide_groups(array $slides): array
@@ -21,14 +50,20 @@ function build_slide_groups(array $slides): array
     $currentPdfGroup = null;
 
     foreach ($slides as $item) {
-        $isPdf = is_pdf_group_slide($item);
+        $sourceType = (string)($item['sourceType'] ?? '');
         $sourceFile = (string)($item['sourceFile'] ?? '');
 
-        if ($isPdf && $sourceFile !== '') {
-            if ($currentPdfGroup !== null && $currentPdfGroup['kind'] === 'pdf' && $currentPdfGroup['sourceFile'] === $sourceFile) {
+        if ($sourceType === 'pdf' && $sourceFile !== '') {
+            if (
+                $currentPdfGroup !== null
+                && (string)($currentPdfGroup['sourceFile'] ?? '') === $sourceFile
+            ) {
                 $currentPdfGroup['items'][] = $item;
-                $groups[count($groups) - 1] = $currentPdfGroup;
                 continue;
+            }
+
+            if ($currentPdfGroup !== null) {
+                $groups[] = $currentPdfGroup;
             }
 
             $currentPdfGroup = [
@@ -36,16 +71,23 @@ function build_slide_groups(array $slides): array
                 'sourceFile' => $sourceFile,
                 'items' => [$item],
             ];
-            $groups[] = $currentPdfGroup;
             continue;
         }
 
-        $currentPdfGroup = null;
+        if ($currentPdfGroup !== null) {
+            $groups[] = $currentPdfGroup;
+            $currentPdfGroup = null;
+        }
+
         $groups[] = [
             'kind' => 'single',
             'sourceFile' => null,
             'items' => [$item],
         ];
+    }
+
+    if ($currentPdfGroup !== null) {
+        $groups[] = $currentPdfGroup;
     }
 
     return $groups;
@@ -58,7 +100,6 @@ function group_contains_slide(array $group, string $slideId): bool
             return true;
         }
     }
-
     return false;
 }
 
@@ -69,12 +110,18 @@ $playlistData = playlist_load_normalized();
 $slides = array_values($playlistData['slides'] ?? []);
 
 if ($id === '' || !in_array($dir, ['up', 'down'], true)) {
+    if (function_exists('app_log')) {
+        app_log('error', 'Move slide aborted: invalid input', [
+            'id' => $id,
+            'dir' => $dir,
+        ]);
+    }
     redirect_admin_move();
 }
 
 $groups = build_slide_groups($slides);
-
 $groupIndex = null;
+
 foreach ($groups as $i => $group) {
     if (group_contains_slide($group, $id)) {
         $groupIndex = $i;
@@ -83,19 +130,28 @@ foreach ($groups as $i => $group) {
 }
 
 if ($groupIndex === null) {
+    if (function_exists('app_log')) {
+        app_log('error', 'Move slide aborted: slide not found in groups', [
+            'id' => $id,
+            'dir' => $dir,
+            'groups' => count($groups),
+        ]);
+    }
     redirect_admin_move();
 }
+
+$oldIndex = $groupIndex;
 
 if ($dir === 'up' && $groupIndex > 0) {
     $tmp = $groups[$groupIndex - 1];
     $groups[$groupIndex - 1] = $groups[$groupIndex];
     $groups[$groupIndex] = $tmp;
-}
-
-if ($dir === 'down' && $groupIndex < count($groups) - 1) {
+    $groupIndex--;
+} elseif ($dir === 'down' && $groupIndex < count($groups) - 1) {
     $tmp = $groups[$groupIndex + 1];
     $groups[$groupIndex + 1] = $groups[$groupIndex];
     $groups[$groupIndex] = $tmp;
+    $groupIndex++;
 }
 
 $newSlides = [];
@@ -110,6 +166,21 @@ foreach ($newSlides as $i => &$item) {
 }
 unset($item);
 
-playlist_save_normalized($newSlides);
+$saveOk = playlist_save_normalized($newSlides);
+
+if (function_exists('app_log')) {
+    app_log($saveOk ? 'info' : 'error', 'Move slide processed', [
+        'id' => $id,
+        'dir' => $dir,
+        'old_group_index' => $oldIndex,
+        'new_group_index' => $groupIndex,
+        'slides_total' => count($newSlides),
+        'save_ok' => $saveOk,
+    ]);
+}
+
+if ($saveOk) {
+    request_player_refresh_after_move();
+}
 
 redirect_admin_move();
