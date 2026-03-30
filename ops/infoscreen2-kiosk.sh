@@ -16,6 +16,24 @@ log() {
     printf '[%s] %s\n' "$(date '+%F %T')" "$*"
 }
 
+hide_cursor_labwc() {
+    if command -v wtype >/dev/null 2>&1; then
+        log "hide cursor via wtype"
+        wtype -M alt -M logo -P h -m alt -m logo >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    if command -v ydotool >/dev/null 2>&1; then
+        log "hide cursor via ydotool"
+        YDOTOOL_SOCKET="${YDOTOOL_SOCKET:-$HOME/.ydotool_socket}" \
+        ydotool key 56:1 125:1 35:1 35:0 125:0 56:0 >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    log "no cursor-hide helper found (wtype/ydotool missing)"
+    return 0
+}
+
 if [ -f "$FLAG" ]; then
     TARGET_URL="$URL_FALLBACK"
     MODE="fallback"
@@ -70,9 +88,10 @@ else
     exit 1
 fi
 
-if command -v unclutter >/dev/null 2>&1; then
-    nohup unclutter -idle 0.1 -root >/dev/null 2>&1 &
-fi
+(
+    sleep 5
+    hide_cursor_labwc
+) &
 
 log "starting chromium binary=$CHROMIUM_BIN"
 
