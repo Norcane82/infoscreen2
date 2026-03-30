@@ -215,12 +215,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
         </select>
       </div>
 
-      <?= colorField(
-          'Hintergrundfarbe',
-          'background',
-          'backgroundPicker',
-          (string)($config['screen']['background'] ?? '#ffffff')
-      ) ?>
+      <?= colorField('Hintergrundfarbe','background','backgroundPicker',(string)($config['screen']['background'] ?? '#ffffff')) ?>
     </div>
 
     <h2 style="margin-top:20px">Uhr</h2>
@@ -238,19 +233,8 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
         <input type="number" name="clockDuration" min="1" value="<?= (int)($config['clock']['defaultDuration'] ?? 10) ?>">
       </div>
 
-      <?= colorField(
-          'Uhr Hintergrund',
-          'clockBackground',
-          'clockBackgroundPicker',
-          (string)($config['clock']['background'] ?? '#ffffff')
-      ) ?>
-
-      <?= colorField(
-          'Uhr Textfarbe',
-          'clockTextColor',
-          'clockTextColorPicker',
-          (string)($config['clock']['textColor'] ?? '#111111')
-      ) ?>
+      <?= colorField('Uhr Hintergrund','clockBackground','clockBackgroundPicker',(string)($config['clock']['background'] ?? '#ffffff')) ?>
+      <?= colorField('Uhr Textfarbe','clockTextColor','clockTextColorPicker',(string)($config['clock']['textColor'] ?? '#111111')) ?>
 
       <div>
         <label>Sekunden anzeigen</label>
@@ -354,18 +338,10 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
         $title = (string)($item['title'] ?? '');
         $typeLabel = slideTypeLabel($item);
         $infoParts = [];
-        if (isset($item['duration'])) {
-            $infoParts[] = 'Dauer: ' . h((string)$item['duration']) . ' s';
-        }
-        if (!empty($item['file'])) {
-            $infoParts[] = 'Quelle: ' . h((string)$item['file']);
-        }
-        if (!empty($item['url'])) {
-            $infoParts[] = 'URL: ' . h((string)$item['url']);
-        }
-        if (isset($item['page'])) {
-            $infoParts[] = 'Seite: ' . h((string)$item['page']);
-        }
+        if (isset($item['duration'])) $infoParts[] = 'Dauer: ' . h((string)$item['duration']) . ' s';
+        if (!empty($item['file'])) $infoParts[] = 'Quelle: ' . h((string)$item['file']);
+        if (!empty($item['url'])) $infoParts[] = 'URL: ' . h((string)$item['url']);
+        if (isset($item['page'])) $infoParts[] = 'Seite: ' . h((string)$item['page']);
       ?>
       <tr>
         <td><?= (int)($item['sort'] ?? 0) ?></td>
@@ -494,9 +470,7 @@ function bindConfirmForms() {
   document.querySelectorAll('.confirmForm').forEach((form) => {
     form.addEventListener('submit', (event) => {
       const message = form.getAttribute('data-confirm') || 'Wirklich ausführen?';
-      if (!window.confirm(message)) {
-        event.preventDefault();
-      }
+      if (!window.confirm(message)) event.preventDefault();
     });
   });
 }
