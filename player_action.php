@@ -20,6 +20,8 @@ function load_health_state(): array
         'last_action' => 'none',
         'requested_view' => 'index',
         'reload_requested_at' => 0,
+        'last_status_snapshot_hash' => '',
+        'last_status_snapshot_time' => 0,
     ]);
 }
 
@@ -60,6 +62,41 @@ function restart_kiosk_service(string $reason): void
         app_log($code === 0 ? 'info' : 'error', 'Kiosk restart requested', [
             'reason' => $reason,
             'script' => $script,
+            'ran' => $ran,
+            'exit_code' => $code,
+            'output' => implode("\n", $output),
+        ]);
+    }
+}
+
+function request_system_reboot(): void
+{
+    $commands = [
+        'sudo /usr/sbin/reboot 2>&1',
+        'sudo /sbin/reboot 2>&1',
+        'sudo reboot 2>&1',
+    ];
+
+    $ran = false;
+    $code = null;
+    $output = [];
+    $usedCommand = '';
+
+    foreach ($commands as $command) {
+        $output = [];
+        $code = null;
+        exec($command, $output, $code);
+        $ran = true;
+        $usedCommand = $command;
+
+        if ($code === 0) {
+            break;
+        }
+    }
+
+    if (function_exists('app_log')) {
+        app_log($code === 0 ? 'warn' : 'error', 'System reboot requested', [
+            'used_command' => $usedCommand,
             'ran' => $ran,
             'exit_code' => $code,
             'output' => implode("\n", $output),
@@ -122,6 +159,17 @@ if ($action === 'fallback_off') {
     }
 
     restart_kiosk_service('manual_fallback_off');
+    redirect_admin_player_action();
+}
+
+if ($action === 'reboot_system') {
+    $state = load_health_state();
+    $state['last_action'] = 'manual_system_reboot';
+    $state['requested_view'] = 'index';
+    $state['reload_requested_at'] = time();
+    save_health_state($state);
+
+    request_system_reboot();
     redirect_admin_player_action();
 }
 
