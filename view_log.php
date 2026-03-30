@@ -9,10 +9,15 @@ $availableLogs = [
         'file' => __DIR__ . '/data/logs/app.log',
         'mode' => 'jsonl',
     ],
+    'status' => [
+        'label' => 'Status-Snapshots',
+        'file' => __DIR__ . '/data/logs/app.log',
+        'mode' => 'status_jsonl',
+    ],
     'trace' => [
         'label' => 'Player Trace Log',
         'file' => __DIR__ . '/data/logs/player_trace.log',
-        'mode' => 'plain',
+        'mode' => 'trace_plain',
     ],
 ];
 
@@ -25,23 +30,57 @@ $selectedLog = $availableLogs[$selectedKey];
 $logFile = $selectedLog['file'];
 $entries = [];
 
+function parse_trace_line(string $line): array
+{
+    $line = trim($line);
+
+    if (preg_match('/^\[([^\]]+)\]\s+([A-Z]+)\s+(.*?)\s+\|\s+(\{.*\})$/', $line, $matches)) {
+        $context = json_decode($matches[4], true);
+        return [
+            'time' => (string)$matches[1],
+            'level' => strtoupper((string)$matches[2]),
+            'message' => (string)$matches[3],
+            'context' => is_array($context) ? $context : [],
+            'raw' => $line,
+        ];
+    }
+
+    return [
+        'time' => '',
+        'level' => 'RAW',
+        'message' => $line,
+        'context' => [],
+        'raw' => $line,
+    ];
+}
+
 if (is_file($logFile)) {
     $lines = @file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     if (is_array($lines)) {
         foreach ($lines as $line) {
-            if ($selectedLog['mode'] === 'jsonl') {
+            if ($selectedLog['mode'] === 'jsonl' || $selectedLog['mode'] === 'status_jsonl') {
                 $decoded = json_decode($line, true);
 
                 if (is_array($decoded)) {
+                    $message = (string)($decoded['message'] ?? '');
+                    if ($selectedLog['mode'] === 'status_jsonl' && $message !== 'Status snapshot') {
+                        continue;
+                    }
+
                     $entries[] = [
                         'time' => (string)($decoded['time'] ?? ''),
                         'level' => strtoupper((string)($decoded['level'] ?? 'INFO')),
-                        'message' => (string)($decoded['message'] ?? ''),
+                        'message' => $message,
                         'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
                         'raw' => $line,
                     ];
                     continue;
                 }
+            }
+
+            if ($selectedLog['mode'] === 'trace_plain') {
+                $entries[] = parse_trace_line($line);
+                continue;
             }
 
             $entries[] = [
@@ -113,6 +152,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0b0d12;padding:12px;b
 .table th{font-size:12px;text-transform:uppercase;color:#9ca3af}
 code{background:#111827;padding:2px 6px;border-radius:6px}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.summaryBox{margin-top:10px;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #23314a;color:#dbeafe}
 </style>
 </head>
 <body>
@@ -120,6 +160,7 @@ code{background:#111827;padding:2px 6px;border-radius:6px}
 <div class="toolbar">
   <a class="btn" href="admin.php">Zurück zur Verwaltung</a>
   <a class="btn" href="view_log.php?file=app">App Log</a>
+  <a class="btn" href="view_log.php?file=status">Status-Snapshots</a>
   <a class="btn" href="view_log.php?file=trace">Player Trace Log</a>
   <a class="btn" href="view_log.php?file=<?= h($selectedKey) ?>">Neu laden</a>
 </div>
@@ -140,6 +181,10 @@ code{background:#111827;padding:2px 6px;border-radius:6px}
       </div>
 
       <div><strong><?= h($entry['message']) ?></strong></div>
+
+      <?php if (!empty($entry['context']['summary'])): ?>
+        <div class="summaryBox"><?= h((string)$entry['context']['summary']) ?></div>
+      <?php endif; ?>
 
       <?php if ($flatContext): ?>
         <table class="table">
