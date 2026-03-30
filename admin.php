@@ -8,12 +8,14 @@ $config = load_config();
 $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
 
-$restartData = read_json_file(DATA_DIR . '/restart_log.json', [
-    'count_30m' => 0,
+$health = read_json_file(HEALTH_FILE, [
+    'last_restart' => 0,
     'restarts' => [],
     'fallback_active' => false,
     'consecutive_failures' => 0,
     'last_action' => 'none',
+    'requested_view' => 'index',
+    'reload_requested_at' => 0,
 ]);
 
 $fallbackText = '';
@@ -101,7 +103,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
 .formActions{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
 .logLinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .statusBox{margin-top:12px;padding:12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}
-.statusBox strong{display:inline-block;min-width:140px}
+.statusBox strong{display:inline-block;min-width:160px}
 </style>
 </head>
 <body>
@@ -130,6 +132,11 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
     <form action="player_action.php" method="post">
       <input type="hidden" name="action" value="restart_player">
       <button type="submit">Player jetzt neu starten</button>
+    </form>
+
+    <form action="player_action.php" method="post">
+      <input type="hidden" name="action" value="restart_kiosk">
+      <button class="warn" type="submit">Kiosk-Dienst neu starten</button>
     </form>
 
     <form action="player_action.php" method="post">
@@ -164,10 +171,10 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
 <div class="card">
   <h2>Status</h2>
   <div class="statusLine" style="margin-top:10px">
-    <span class="badge <?= !empty($restartData['fallback_active']) ? 'off' : 'ok' ?>">Fallback <?= !empty($restartData['fallback_active']) ? 'aktiv' : 'normal' ?></span>
-    <span>Letzte Aktion: <code><?= h((string)($restartData['last_action'] ?? 'none')) ?></code></span>
-    <span>Neustarts in 30 Min: <strong><?= (int)($restartData['count_30m'] ?? 0) ?></strong></span>
-    <span>Consecutive Failures: <strong><?= (int)($restartData['consecutive_failures'] ?? 0) ?></strong></span>
+    <span class="badge <?= !empty($health['fallback_active']) ? 'off' : 'ok' ?>">Fallback <?= !empty($health['fallback_active']) ? 'aktiv' : 'normal' ?></span>
+    <span>Letzte Aktion: <code><?= h((string)($health['last_action'] ?? 'none')) ?></code></span>
+    <span>Neustarts in 30 Min: <strong><?= count((array)($health['restarts'] ?? [])) ?></strong></span>
+    <span>Consecutive Failures: <strong><?= (int)($health['consecutive_failures'] ?? 0) ?></strong></span>
     <?php if ($fallbackText !== ''): ?>
       <span>Fallback-Grund: <code><?= h($fallbackText) ?></code></span>
     <?php endif; ?>
@@ -420,9 +427,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
 <script>
 function toggleEdit(id) {
   const row = document.getElementById(id);
-  if (!row) {
-    return;
-  }
+  if (!row) return;
   row.style.display = row.style.display === 'table-row' ? 'none' : 'table-row';
 }
 
@@ -430,10 +435,7 @@ async function loadLiveStatus() {
   const target = document.getElementById('liveStatus');
   const summary = document.getElementById('liveStatusSummary');
   const snapshot = document.getElementById('liveStatusSnapshot');
-
-  if (!target || !summary || !snapshot) {
-    return;
-  }
+  if (!target || !summary || !snapshot) return;
 
   try {
     const response = await fetch('status.php', { cache: 'no-store' });
@@ -466,10 +468,7 @@ function bindColorFields() {
   document.querySelectorAll('.colorField').forEach((field) => {
     const text = field.querySelector('[data-color-text]');
     const picker = field.querySelector('[data-color-picker]');
-
-    if (!text || !picker) {
-      return;
-    }
+    if (!text || !picker) return;
 
     const normalize = (value) => {
       const trimmed = String(value || '').trim();
@@ -478,9 +477,7 @@ function bindColorFields() {
 
     const syncFromText = () => {
       const normalized = normalize(text.value);
-      if (normalized) {
-        picker.value = normalized;
-      }
+      if (normalized) picker.value = normalized;
     };
 
     const syncFromPicker = () => {
@@ -489,7 +486,6 @@ function bindColorFields() {
 
     text.addEventListener('input', syncFromText);
     picker.addEventListener('input', syncFromPicker);
-
     syncFromText();
   });
 }
