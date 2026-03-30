@@ -74,6 +74,7 @@ function request_system_reboot(): void
     $commands = [
         'sudo /usr/sbin/reboot 2>&1',
         'sudo /sbin/reboot 2>&1',
+        'sudo /usr/bin/systemctl reboot 2>&1',
         'sudo reboot 2>&1',
     ];
 
@@ -110,6 +111,17 @@ $fallbackFile = __DIR__ . '/cache/fallback_active.flag';
 if ($action === 'restart_player') {
     request_player_refresh('index', 'manual_restart_player');
     restart_kiosk_service('manual_restart_player');
+    redirect_admin_player_action();
+}
+
+if ($action === 'restart_kiosk') {
+    $state = load_health_state();
+    $state['last_action'] = 'manual_restart_kiosk';
+    $state['requested_view'] = !empty($state['fallback_active']) ? 'fallback' : 'index';
+    $state['reload_requested_at'] = time();
+    save_health_state($state);
+
+    restart_kiosk_service('manual_restart_kiosk');
     redirect_admin_player_action();
 }
 
