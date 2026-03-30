@@ -99,6 +99,9 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
 .colorField{display:flex;gap:8px;align-items:center}
 .colorField input[type=text]{flex:1 1 auto}
 .formActions{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
+.logLinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.statusBox{margin-top:12px;padding:12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0}
+.statusBox strong{display:inline-block;min-width:140px}
 </style>
 </head>
 <body>
@@ -114,6 +117,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
   <a class="btn secondary" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
   <a class="btn secondary" href="status.php" target="_blank">Status JSON</a>
   <a class="btn secondary" href="view_log.php">Logs anzeigen</a>
+  <a class="btn secondary" href="view_log.php?file=status">Status-Snapshots</a>
   <a class="btn secondary" href="backups.php">Backups</a>
   <form action="watchdog_reset.php" method="post" style="display:inline">
     <button class="secondary" type="submit">Watchdog zurücksetzen</button>
@@ -138,6 +142,11 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
       <button class="secondary" type="submit">Fallback deaktivieren</button>
     </form>
 
+    <form action="player_action.php" method="post" class="confirmForm" data-confirm="Wirklich das gesamte System neu starten?">
+      <input type="hidden" name="action" value="reboot_system">
+      <button class="danger" type="submit">System neu starten</button>
+    </form>
+
     <form action="run_watchdog.php" method="post">
       <button class="secondary" type="submit">Watchdog jetzt ausführen</button>
     </form>
@@ -146,7 +155,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
       <button class="secondary" type="submit">Backup erstellen</button>
     </form>
 
-    <form action="cleanup_orphans.php" method="post">
+    <form action="cleanup_orphans.php" method="post" class="confirmForm" data-confirm="Wirklich verwaiste Dateien aufräumen?">
       <button class="danger" type="submit">Verwaiste Dateien aufräumen</button>
     </form>
   </div>
@@ -163,7 +172,18 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
       <span>Fallback-Grund: <code><?= h($fallbackText) ?></code></span>
     <?php endif; ?>
   </div>
-  <p id="liveStatus" class="small" style="margin-top:12px">Lade Live-Status ...</p>
+
+  <div id="liveStatusBox" class="statusBox">
+    <div><strong>Live-Status:</strong> <span id="liveStatus">Lade Live-Status ...</span></div>
+    <div style="margin-top:8px"><strong>Status-Zusammenfassung:</strong> <span id="liveStatusSummary">wird geladen ...</span></div>
+    <div style="margin-top:8px"><strong>Letzter Snapshot:</strong> <span id="liveStatusSnapshot">noch keiner</span></div>
+  </div>
+
+  <div class="logLinks">
+    <a class="btn secondary" href="view_log.php?file=app">App Log</a>
+    <a class="btn secondary" href="view_log.php?file=trace">Player Trace Log</a>
+    <a class="btn secondary" href="view_log.php?file=status">Status-Snapshots</a>
+  </div>
 </div>
 
 <div class="card">
@@ -363,7 +383,7 @@ code{background:#eef2ff;padding:2px 6px;border-radius:6px}
               <button class="secondary" type="submit"><?= $enabled ? 'Deaktivieren' : 'Aktivieren' ?></button>
             </form>
             <button class="secondary" type="button" onclick="toggleEdit('edit-<?= h($id) ?>')">Bearbeiten</button>
-            <form action="delete_slide.php" method="post" onsubmit="return confirm('Folie wirklich löschen?');">
+            <form action="delete_slide.php" method="post" class="confirmForm" data-confirm="Folie wirklich löschen?">
               <input type="hidden" name="id" value="<?= h($id) ?>">
               <button class="danger" type="submit">Löschen</button>
             </form>
@@ -408,7 +428,10 @@ function toggleEdit(id) {
 
 async function loadLiveStatus() {
   const target = document.getElementById('liveStatus');
-  if (!target) {
+  const summary = document.getElementById('liveStatusSummary');
+  const snapshot = document.getElementById('liveStatusSnapshot');
+
+  if (!target || !summary || !snapshot) {
     return;
   }
 
@@ -418,6 +441,8 @@ async function loadLiveStatus() {
 
     if (!data || data.ok !== true) {
       target.textContent = 'Live-Status konnte nicht geladen werden.';
+      summary.textContent = 'keine Zusammenfassung verfügbar';
+      snapshot.textContent = 'kein Snapshot';
       return;
     }
 
@@ -425,9 +450,15 @@ async function loadLiveStatus() {
       'Player: ' + (data.player_running ? 'läuft' : 'steht') +
       ' | Apache: ' + (data.apache_running ? 'läuft' : 'steht') +
       ' | Aktivierte Folien: ' + data.enabled_slides +
-      ' | Letzte Watchdog-Zeile: ' + (data.last_log_line || 'keine');
+      ' | Angeforderte Ansicht: ' + (data.requested_view || 'index') +
+      ' | Letzte Aktion: ' + (data.last_action || 'none');
+
+    summary.textContent = data.status_summary || 'keine Zusammenfassung vorhanden';
+    snapshot.textContent = data.last_status_snapshot_time || 'noch kein Snapshot';
   } catch (error) {
     target.textContent = 'Live-Status konnte nicht geladen werden.';
+    summary.textContent = 'keine Zusammenfassung verfügbar';
+    snapshot.textContent = 'kein Snapshot';
   }
 }
 
@@ -463,8 +494,20 @@ function bindColorFields() {
   });
 }
 
+function bindConfirmForms() {
+  document.querySelectorAll('.confirmForm').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      const message = form.getAttribute('data-confirm') || 'Wirklich ausführen?';
+      if (!window.confirm(message)) {
+        event.preventDefault();
+      }
+    });
+  });
+}
+
 loadLiveStatus();
 bindColorFields();
+bindConfirmForms();
 setInterval(loadLiveStatus, 15000);
 </script>
 
