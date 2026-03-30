@@ -66,6 +66,10 @@ $buildTs = (string) max(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Infoscreen 2</title>
     <link rel="stylesheet" href="assets/css/screen.css?v=<?php echo htmlspecialchars($buildTs, ENT_QUOTES, 'UTF-8'); ?>">
+    <style>
+      html, body { cursor: none !important; overflow: hidden; }
+      * { cursor: none !important; }
+    </style>
 </head>
 <body>
     <div id="screen-root" class="screen-root">
