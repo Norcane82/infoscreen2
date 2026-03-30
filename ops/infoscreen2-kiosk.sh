@@ -94,6 +94,10 @@ exec "$CHROMIUM_BIN" \
     --disable-dev-shm-usage \
     --ozone-platform=wayland \
     --enable-features=UseOzonePlatform \
+    --disable-gpu \
+    --disable-gpu-compositing \
+    --disable-gpu-rasterization \
+    --disable-software-rasterizer \
     --hide-scrollbars \
     --force-renderer-accessibility \
     "$TARGET_URL"
