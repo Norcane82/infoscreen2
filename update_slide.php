@@ -4,12 +4,32 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/bootstrap.php';
 require_once __DIR__ . '/inc/playlist.php';
 
+function update_slide_redirect(): never {
+    header('Location: admin.php');
+    exit;
+}
+
+function update_slide_mark_reload(string $action = 'update_slide'): void
+{
+    $state = read_json_file(HEALTH_FILE, [
+        'last_restart' => 0,
+        'restarts' => [],
+        'fallback_active' => false,
+        'consecutive_failures' => 0,
+        'last_action' => 'none',
+        'requested_view' => 'index',
+        'reload_requested_at' => 0,
+    ]);
+    $state['last_action'] = $action;
+    $state['requested_view'] = !empty($state['fallback_active']) ? 'fallback' : 'index';
+    $state['reload_requested_at'] = time();
+    write_json_file(HEALTH_FILE, $state);
+}
+
 $config = load_config();
 $id = trim((string)($_POST['id'] ?? ''));
-
 $playlistData = playlist_load_normalized();
 $slides = $playlistData['slides'] ?? [];
-
 $targetSlide = null;
 foreach ($slides as $item) {
     if ((string)($item['id'] ?? '') === $id) {
@@ -17,35 +37,35 @@ foreach ($slides as $item) {
         break;
     }
 }
-
 if ($targetSlide === null) {
-    header('Location: admin.php');
-    exit;
+    update_slide_redirect();
 }
 
-$isPdfRenderedImage =
-    (($targetSlide['type'] ?? '') === 'image') &&
-    (($targetSlide['sourceType'] ?? '') === 'pdf');
+$enabled = (string)($_POST['enabled'] ?? '1') === '1';
+$duration = max(1, (int)($_POST['duration'] ?? ($targetSlide['duration'] ?? 8)));
+$fade = max(0, (float)($_POST['fade'] ?? ($targetSlide['fade'] ?? ($config['screen']['defaultFade'] ?? 1.2))));
+$fit = (string)($_POST['fit'] ?? ($targetSlide['fit'] ?? 'contain'));
+$fit = in_array($fit, ['contain', 'cover'], true) ? $fit : 'contain';
+$hasValidity = (string)($_POST['hasValidity'] ?? '0') === '1';
+$validFrom = playlist_normalize_date((string)($_POST['validFrom'] ?? ''));
+$validUntil = playlist_normalize_date((string)($_POST['validUntil'] ?? ''));
+if ($hasValidity && $validFrom === null) {
+    $validFrom = playlist_today_vienna()->format('Y-m-d');
+}
+if ($hasValidity && $validUntil === null) {
+    $validUntil = playlist_today_vienna()->modify('+10 years')->format('Y-m-d');
+}
+
+$isPdfRenderedImage = (($targetSlide['type'] ?? '') === 'image') && (($targetSlide['sourceType'] ?? '') === 'pdf');
 
 if ($isPdfRenderedImage) {
     $groupSourceFile = (string)($targetSlide['sourceFile'] ?? '');
     $groupSourceTitle = trim((string)($_POST['title'] ?? ($targetSlide['sourceTitle'] ?? $targetSlide['title'] ?? '')));
-    $enabled = !empty($_POST['enabled']);
-    $duration = max(1, (int)($_POST['duration'] ?? ($targetSlide['duration'] ?? 8)));
-    $fit = (string)($_POST['fit'] ?? ($targetSlide['fit'] ?? 'contain'));
-    $fit = in_array($fit, ['contain', 'cover'], true) ? $fit : 'contain';
-    $fade = max(0, (float)($_POST['fade'] ?? ($targetSlide['fade'] ?? ($config['screen']['defaultFade'] ?? 1))));
-
     foreach ($slides as &$item) {
-        $samePdfGroup =
-            (($item['type'] ?? '') === 'image') &&
-            (($item['sourceType'] ?? '') === 'pdf') &&
-            ((string)($item['sourceFile'] ?? '') === $groupSourceFile);
-
+        $samePdfGroup = (($item['type'] ?? '') === 'image') && (($item['sourceType'] ?? '') === 'pdf') && ((string)($item['sourceFile'] ?? '') === $groupSourceFile);
         if (!$samePdfGroup) {
             continue;
         }
-
         $page = (int)($item['page'] ?? 0);
         $item['sourceTitle'] = $groupSourceTitle;
         $item['title'] = $groupSourceTitle . ' - Seite ' . $page;
@@ -53,13 +73,14 @@ if ($isPdfRenderedImage) {
         $item['duration'] = $duration;
         $item['fit'] = $fit;
         $item['fade'] = $fade;
+        $item['hasValidity'] = $hasValidity;
+        $item['validFrom'] = $validFrom;
+        $item['validUntil'] = $validUntil;
     }
     unset($item);
-
     playlist_save_normalized($slides);
-
-    header('Location: admin.php');
-    exit;
+    update_slide_mark_reload('update_slide_pdf_group');
+    update_slide_redirect();
 }
 
 foreach ($slides as &$item) {
@@ -68,38 +89,34 @@ foreach ($slides as &$item) {
     }
 
     $type = (string)($item['type'] ?? '');
-
     $item['title'] = trim((string)($_POST['title'] ?? ($item['title'] ?? '')));
-    $item['enabled'] = !empty($_POST['enabled']);
-    $item['duration'] = max(1, (int)($_POST['duration'] ?? ($item['duration'] ?? 8)));
+    $item['enabled'] = $enabled;
+    $item['duration'] = $duration;
+    $item['hasValidity'] = $hasValidity;
+    $item['validFrom'] = $validFrom;
+    $item['validUntil'] = $validUntil;
 
     if ($type === 'image') {
-        $fit = (string)($_POST['fit'] ?? ($item['fit'] ?? 'contain'));
-        $item['fit'] = in_array($fit, ['contain', 'cover'], true) ? $fit : 'contain';
-        $item['fade'] = max(0, (float)($_POST['fade'] ?? ($item['fade'] ?? ($config['screen']['defaultFade'] ?? 1))));
+        $item['fit'] = $fit;
+        $item['fade'] = $fade;
     }
-
     if ($type === 'video') {
         $mode = (string)($_POST['videoMode'] ?? ($item['videoMode'] ?? 'until_end'));
-        $item['videoMode'] = in_array($mode, ['until_end', 'fixed'], true) ? $mode : 'until_end';
-        $item['muted'] = !empty($_POST['muted']);
+        $item['videoMode'] = in_array($mode, ['until_end', 'fixed_duration', 'fixed'], true) ? $mode : 'until_end';
+        $item['muted'] = (string)($_POST['muted'] ?? '1') === '1';
     }
-
     if ($type === 'website') {
-        $item['url'] = trim((string)($_POST['url'] ?? ($item['url'] ?? '')));
+        $url = trim((string)($_POST['url'] ?? ($item['url'] ?? '')));
+        if ($url !== '') {
+            $item['url'] = $url;
+        }
         $item['refreshSeconds'] = max(0, (int)($_POST['refreshSeconds'] ?? ($item['refreshSeconds'] ?? 0)));
-        $item['timeout'] = max(1, (int)($_POST['timeout'] ?? ($item['timeout'] ?? 8)));
+        $item['timeout'] = max(1, (int)($_POST['timeoutSeconds'] ?? ($item['timeout'] ?? 8)));
     }
-
-    if ($type === 'clock') {
-        $item['duration'] = max(1, (int)($_POST['duration'] ?? ($config['clock']['defaultDuration'] ?? 10)));
-    }
-
     break;
 }
 unset($item);
 
 playlist_save_normalized($slides);
-
-header('Location: admin.php');
-exit;
+update_slide_mark_reload('update_slide');
+update_slide_redirect();
