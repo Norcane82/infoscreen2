@@ -460,3 +460,17 @@ tbody tr:hover:not(.editRow){
         min-width:260px;
     }
 }
+.validityBox{
+    display:none;
+    margin-top:14px;
+    padding:14px;
+    border:1px solid #c8dafd;
+    border-radius:14px;
+    background:#f4f8ff;
+}
+
+.validityBox__header{
+    font-weight:700;
+    margin-bottom:10px;
+    color:#24436f;
+}
