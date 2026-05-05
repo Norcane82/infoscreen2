@@ -107,6 +107,15 @@ exec "$CHROMIUM_BIN" \
     --disable-component-update \
     --disable-background-networking \
     --disable-sync \
+    --disable-extensions \
+    --disable-notifications \
+    --disable-push-messaging \
+    --disable-domain-reliability \
+    --disable-client-side-phishing-detection \
+    --disable-default-apps \
+    --disable-background-timer-throttling \
+    --metrics-recording-only \
+    --safebrowsing-disable-auto-update \
     --disable-features=Translate,MediaRouter \
     --autoplay-policy=no-user-gesture-required \
     --check-for-update-interval=31536000 \
