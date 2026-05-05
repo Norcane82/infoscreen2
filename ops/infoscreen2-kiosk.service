@@ -1,0 +1,22 @@
+[Unit]
+Description=Infoscreen2 Chromium Kiosk
+After=graphical.target network-online.target apache2.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+ExecStartPre=/bin/sleep 15
+ExecStart=/usr/local/bin/infoscreen2-kiosk.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/tmp/infoscreen2-kiosk.log
+StandardError=append:/tmp/infoscreen2-kiosk.log
+
+[Install]
+WantedBy=graphical.target
