@@ -44,6 +44,9 @@ function colorField(string $label, string $textName, string $pickerName, string 
 </div>
 HTML;
 }
+
+$adminCss = __DIR__ . '/assets/css/admin.css';
+$adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
 ?>
 <!DOCTYPE html>
 <html lang="de">
@@ -51,384 +54,7 @@ HTML;
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Infoscreen2 Verwaltung</title>
-<style>
-:root{
-    --bg:#f3f5f7;
-    --card:#ffffff;
-    --text:#1f2933;
-    --muted:#667085;
-    --line:#d9dee5;
-    --line-soft:#edf0f3;
-    --shadow:0 8px 24px rgba(15,23,42,.08);
-    --radius:16px;
-    --primary:#2563eb;
-    --primary-soft:#e8f0ff;
-    --ok-bg:#dcfce7;
-    --ok-text:#166534;
-    --warn-bg:#fff3cd;
-    --warn-text:#7a4b00;
-    --danger:#d9534f;
-    --danger-dark:#b42318;
-    --danger-soft:#fff1f1;
-    --danger-line:#f3b4b4;
-    --button:#e9edf2;
-    --button-hover:#dfe5ec;
-}
-*{box-sizing:border-box}
-body{
-    font-family:Arial,Helvetica,sans-serif;
-    margin:0;
-    padding:18px;
-    background:var(--bg);
-    color:var(--text);
-}
-h1{
-    margin:0 0 16px 0;
-    font-size:1.8rem;
-    line-height:1.2;
-}
-h2{
-    margin:0 0 14px 0;
-    font-size:1.25rem;
-}
-h3{
-    margin:18px 0 12px 0;
-    font-size:1.05rem;
-}
-a{color:inherit}
-code{
-    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-    font-size:.92em;
-    word-break:break-all;
-}
-.layout{
-    max-width:1900px;
-    margin:0 auto;
-}
-.topLinks,
-.actions,
-.logLinks,
-.formActions,
-.buttonRow{
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap;
-    align-items:center;
-}
-.topLinks{
-    margin-bottom:14px;
-}
-.card{
-    background:var(--card);
-    border:1px solid var(--line-soft);
-    border-radius:var(--radius);
-    padding:20px;
-    margin:0 0 18px 0;
-    box-shadow:var(--shadow);
-}
-.card--danger{
-    border-color:var(--danger-line);
-    background:linear-gradient(180deg,#fff,#fff7f7);
-}
-.cardHeader{
-    display:flex;
-    gap:12px;
-    justify-content:space-between;
-    align-items:flex-start;
-    flex-wrap:wrap;
-    margin-bottom:14px;
-}
-.cardHeader p{
-    margin:4px 0 0 0;
-}
-.grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-    gap:14px;
-}
-.grid--wide{
-    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-}
-.grid--compact{
-    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-}
-.field label,
-label{
-    display:block;
-    font-weight:700;
-    margin-bottom:6px;
-}
-input,
-select,
-button{
-    font:inherit;
-}
-input[type=text],
-input[type=url],
-input[type=number],
-input[type=date],
-select{
-    width:100%;
-    min-height:38px;
-    padding:8px 10px;
-    border:1px solid #cbd5df;
-    border-radius:9px;
-    background:#fff;
-}
-input[type=file]{
-    max-width:100%;
-}
-button,
-.btn{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-height:36px;
-    padding:8px 12px;
-    border:0;
-    border-radius:9px;
-    background:var(--button);
-    color:#111;
-    text-decoration:none;
-    cursor:pointer;
-    white-space:nowrap;
-}
-button:hover,
-.btn:hover{
-    background:var(--button-hover);
-}
-button:disabled,
-.btn.is-disabled{
-    opacity:.55;
-    cursor:not-allowed;
-    pointer-events:none;
-}
-.primary{
-    background:var(--primary);
-    color:#fff;
-}
-.primary:hover{
-    background:#1d4ed8;
-}
-.danger{
-    background:var(--danger);
-    color:#fff;
-}
-.danger:hover{
-    background:var(--danger-dark);
-}
-.warn{
-    background:#f0ad4e;
-    color:#111;
-}
-.warn:hover{
-    background:#e59d35;
-}
-.secondary{
-    background:#dde3ea;
-}
-.small{
-    font-size:.9rem;
-    color:var(--muted);
-}
-.muted{
-    color:var(--muted);
-}
-.notice{
-    padding:10px 12px;
-    background:var(--primary-soft);
-    border:1px solid #c8dafd;
-    border-radius:12px;
-    margin:0 0 16px 0;
-}
-.statusGrid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-    gap:10px;
-    margin-bottom:12px;
-}
-.statusTile{
-    background:#f8fafc;
-    border:1px solid var(--line-soft);
-    border-radius:12px;
-    padding:12px;
-}
-.statusTile__label{
-    display:block;
-    font-size:.82rem;
-    color:var(--muted);
-    margin-bottom:4px;
-}
-.statusTile__value{
-    font-weight:700;
-}
-.statusBox{
-    margin-top:10px;
-    padding:14px;
-    background:#fafafa;
-    border:1px solid var(--line-soft);
-    border-radius:12px;
-}
-.statusBox div + div{
-    margin-top:8px;
-}
-.badge{
-    display:inline-flex;
-    align-items:center;
-    padding:4px 9px;
-    border-radius:999px;
-    font-weight:700;
-    font-size:.9rem;
-}
-.ok{
-    background:var(--ok-bg);
-    color:var(--ok-text);
-}
-.off{
-    background:#f8d7da;
-    color:#7b1f29;
-}
-.warningBadge{
-    background:var(--warn-bg);
-    color:var(--warn-text);
-}
-.criticalPanel{
-    border:1px solid var(--danger-line);
-    border-radius:14px;
-    background:var(--danger-soft);
-    overflow:hidden;
-}
-.criticalPanel summary{
-    cursor:pointer;
-    padding:14px 16px;
-    font-weight:700;
-    color:var(--danger-dark);
-    list-style:none;
-}
-.criticalPanel summary::-webkit-details-marker{
-    display:none;
-}
-.criticalPanel summary::before{
-    content:"▶";
-    display:inline-block;
-    margin-right:8px;
-    transition:transform .15s ease;
-}
-.criticalPanel[open] summary::before{
-    transform:rotate(90deg);
-}
-.criticalPanel__body{
-    padding:0 16px 16px 16px;
-}
-.criticalHint{
-    margin:0 0 12px 0;
-    color:#7a271a;
-}
-.actionZone{
-    display:grid;
-    grid-template-columns:1fr;
-    gap:14px;
-}
-.safeActions{
-    padding:14px;
-    border:1px solid var(--line-soft);
-    border-radius:14px;
-    background:#fbfcfd;
-}
-table{
-    width:100%;
-    border-collapse:separate;
-    border-spacing:0;
-    background:#fff;
-}
-th,
-td{
-    padding:12px 10px;
-    border-bottom:1px solid var(--line);
-    text-align:left;
-    vertical-align:top;
-}
-th{
-    font-size:.9rem;
-    color:#334155;
-    background:#f8fafc;
-    position:sticky;
-    top:0;
-    z-index:1;
-}
-tbody tr:hover:not(.editRow){
-    background:#fcfdff;
-}
-.playlistTableWrap{
-    overflow-x:auto;
-}
-.playlistActions{
-    display:flex;
-    flex-wrap:wrap;
-    gap:7px;
-    align-items:center;
-    min-width:360px;
-}
-.playlistActions button,
-.playlistActions .btn{
-    min-height:32px;
-    padding:6px 10px;
-    font-size:.92rem;
-}
-.infoCell{
-    max-width:650px;
-}
-.pathText{
-    display:inline-block;
-    max-width:100%;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    vertical-align:bottom;
-    word-break:break-all;
-}
-.editRow{
-    display:none;
-}
-.editPanel{
-    background:#f8fafc;
-    border:1px solid #dce4ee;
-    border-radius:14px;
-    padding:16px;
-}
-.colorField__row{
-    display:grid;
-    grid-template-columns:1fr 46px;
-    gap:8px;
-    align-items:center;
-}
-.colorField input[type=color]{
-    width:46px;
-    height:38px;
-    padding:2px;
-    border:1px solid #cbd5df;
-    border-radius:9px;
-    background:#fff;
-}
-.validityFields{
-    display:contents;
-}
-.sectionDivider{
-    border-top:1px solid var(--line-soft);
-    margin:20px 0 16px 0;
-}
-.formActions{
-    margin-top:16px;
-}
-.uploadNote{
-    margin:10px 0 0 0;
-}
-@media (max-width:900px){
-    body{padding:12px}
-    .card{padding:16px}
-    th,td{padding:10px 8px}
-    .playlistActions{min-width:260px}
-}
-</style>
+<link rel="stylesheet" href="assets/css/admin.css?v=<?= $adminCssVersion ?>">
 </head>
 <body>
 <div class="layout">
@@ -618,69 +244,76 @@ tbody tr:hover:not(.editRow){
 
         <div class="sectionDivider"></div>
 
-        <h2>Watchdog</h2>
-        <div class="grid">
-            <div class="field">
-                <label>Watchdog aktiviert</label>
-                <select name="watchdogEnabled">
-                    <option value="1" <?= !empty($config['system']['watchdogEnabled']) ? 'selected' : '' ?>>Ja</option>
-                    <option value="0" <?= empty($config['system']['watchdogEnabled']) ? 'selected' : '' ?>>Nein</option>
-                </select>
+        <details class="criticalPanel">
+            <summary>Technische Watchdog-Einstellungen anzeigen</summary>
+            <div class="criticalPanel__body">
+                <p class="criticalHint">
+                    Diese Werte steuern Neustarts, Healthchecks und automatische Schutzreaktionen. Nur ändern, wenn klar ist, was die Werte bewirken.
+                </p>
+
+                <div class="grid">
+                    <div class="field">
+                        <label>Watchdog aktiviert</label>
+                        <select name="watchdogEnabled">
+                            <option value="1" <?= !empty($config['system']['watchdogEnabled']) ? 'selected' : '' ?>>Ja</option>
+                            <option value="0" <?= empty($config['system']['watchdogEnabled']) ? 'selected' : '' ?>>Nein</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>CPU Limit %</label>
+                        <input type="number" name="cpuLimit" min="1" max="100" value="<?= (int)($config['system']['maxCpuPercent'] ?? 85) ?>">
+                    </div>
+                    <div class="field">
+                        <label>RAM Limit %</label>
+                        <input type="number" name="ramLimit" min="1" max="100" value="<?= (int)($config['system']['maxRamPercent'] ?? 85) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Cooldown Sekunden</label>
+                        <input type="number" name="cooldownSeconds" min="30" value="<?= (int)($config['system']['restartCooldownSeconds'] ?? 180) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Max Restarts / 30 Min</label>
+                        <input type="number" name="maxRestartsIn30Min" min="1" value="<?= (int)($config['system']['maxRestartsPer30Min'] ?? 3) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Consecutive Fails nötig</label>
+                        <input type="number" name="requireConsecutiveFails" min="1" value="<?= (int)($config['system']['requireConsecutiveFails'] ?? 2) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Reboot nach Player-Restarts</label>
+                        <input type="number" name="rebootAfterPlayerRestarts" min="1" value="<?= (int)($config['system']['rebootAfterPlayerRestarts'] ?? 2) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Apache Healthcheck</label>
+                        <select name="apacheHealthcheck">
+                            <option value="1" <?= !empty($config['system']['apacheHealthcheck']) ? 'selected' : '' ?>>Ja</option>
+                            <option value="0" <?= empty($config['system']['apacheHealthcheck']) ? 'selected' : '' ?>>Nein</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Apache URL</label>
+                        <input type="text" name="apacheUrl" value="<?= h((string)($config['system']['apacheUrl'] ?? 'http://127.0.0.1/infoscreen2/index.php')) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Apache Timeout Sekunden</label>
+                        <input type="number" name="apacheTimeoutSeconds" min="1" value="<?= (int)($config['system']['apacheTimeoutSeconds'] ?? 8) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Apache im Fallback stoppen</label>
+                        <select name="stopApacheInFallback">
+                            <option value="1" <?= !empty($config['system']['stopApacheInFallback']) ? 'selected' : '' ?>>Ja</option>
+                            <option value="0" <?= empty($config['system']['stopApacheInFallback']) ? 'selected' : '' ?>>Nein</option>
+                        </select>
+                    </div>
+                </div>
             </div>
-            <div class="field">
-                <label>CPU Limit %</label>
-                <input type="number" name="cpuLimit" min="1" max="100" value="<?= (int)($config['system']['maxCpuPercent'] ?? 85) ?>">
-            </div>
-            <div class="field">
-                <label>RAM Limit %</label>
-                <input type="number" name="ramLimit" min="1" max="100" value="<?= (int)($config['system']['maxRamPercent'] ?? 85) ?>">
-            </div>
-            <div class="field">
-                <label>Cooldown Sekunden</label>
-                <input type="number" name="cooldownSeconds" min="30" value="<?= (int)($config['system']['restartCooldownSeconds'] ?? 180) ?>">
-            </div>
-            <div class="field">
-                <label>Max Restarts / 30 Min</label>
-                <input type="number" name="maxRestartsIn30Min" min="1" value="<?= (int)($config['system']['maxRestartsPer30Min'] ?? 3) ?>">
-            </div>
-            <div class="field">
-                <label>Consecutive Fails nötig</label>
-                <input type="number" name="requireConsecutiveFails" min="1" value="<?= (int)($config['system']['requireConsecutiveFails'] ?? 2) ?>">
-            </div>
-            <div class="field">
-                <label>Reboot nach Player-Restarts</label>
-                <input type="number" name="rebootAfterPlayerRestarts" min="1" value="<?= (int)($config['system']['rebootAfterPlayerRestarts'] ?? 2) ?>">
-            </div>
-            <div class="field">
-                <label>Apache Healthcheck</label>
-                <select name="apacheHealthcheck">
-                    <option value="1" <?= !empty($config['system']['apacheHealthcheck']) ? 'selected' : '' ?>>Ja</option>
-                    <option value="0" <?= empty($config['system']['apacheHealthcheck']) ? 'selected' : '' ?>>Nein</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Apache URL</label>
-                <input type="text" name="apacheUrl" value="<?= h((string)($config['system']['apacheUrl'] ?? 'http://127.0.0.1/infoscreen2/index.php')) ?>">
-            </div>
-            <div class="field">
-                <label>Apache Timeout Sekunden</label>
-                <input type="number" name="apacheTimeoutSeconds" min="1" value="<?= (int)($config['system']['apacheTimeoutSeconds'] ?? 8) ?>">
-            </div>
-            <div class="field">
-                <label>Apache im Fallback stoppen</label>
-                <select name="stopApacheInFallback">
-                    <option value="1" <?= !empty($config['system']['stopApacheInFallback']) ? 'selected' : '' ?>>Ja</option>
-                    <option value="0" <?= empty($config['system']['stopApacheInFallback']) ? 'selected' : '' ?>>Nein</option>
-                </select>
-            </div>
-        </div>
+        </details>
 
         <div class="formActions">
             <button type="submit">Einstellungen speichern</button>
         </div>
     </form>
 </div>
-
 <div class="card">
     <form action="upload.php" method="post" enctype="multipart/form-data">
         <h2>Neue Datei hochladen</h2>
@@ -722,7 +355,11 @@ tbody tr:hover:not(.editRow){
             <div class="field">
                 <label><input type="checkbox" name="hasValidity" value="1" data-validity-toggle> Gültigkeit aktiv</label>
             </div>
-            <div class="validityFields" data-validity-fields>
+        </div>
+
+        <div class="validityBox" data-validity-fields>
+            <div class="validityBox__header">Gültigkeitszeitraum</div>
+            <div class="grid grid--compact">
                 <div class="field">
                     <label>Gültig von</label>
                     <input type="date" name="validFrom" value="<?= date('Y-m-d') ?>">
@@ -733,6 +370,7 @@ tbody tr:hover:not(.editRow){
                 </div>
             </div>
         </div>
+
         <p class="small uploadNote">PDF-Dateien werden beim Upload automatisch in Bildseiten umgewandelt.</p>
         <div class="formActions">
             <button type="submit">Datei hochladen</button>
@@ -775,7 +413,11 @@ tbody tr:hover:not(.editRow){
             <div class="field">
                 <label><input type="checkbox" name="hasValidity" value="1" data-validity-toggle> Gültigkeit aktiv</label>
             </div>
-            <div class="validityFields" data-validity-fields>
+        </div>
+
+        <div class="validityBox" data-validity-fields>
+            <div class="validityBox__header">Gültigkeitszeitraum</div>
+            <div class="grid grid--compact">
                 <div class="field">
                     <label>Gültig von</label>
                     <input type="date" name="validFrom" value="<?= date('Y-m-d') ?>">
@@ -786,6 +428,7 @@ tbody tr:hover:not(.editRow){
                 </div>
             </div>
         </div>
+
         <div class="formActions">
             <button type="submit">Webseiten-Folie speichern</button>
         </div>
@@ -934,7 +577,11 @@ tbody tr:hover:not(.editRow){
                                             Gültigkeit aktiv
                                         </label>
                                     </div>
-                                    <div class="validityFields" data-validity-fields>
+                                </div>
+
+                                <div class="validityBox" data-validity-fields>
+                                    <div class="validityBox__header">Gültigkeitszeitraum</div>
+                                    <div class="grid grid--compact">
                                         <div class="field">
                                             <label>Gültig von</label>
                                             <input type="date" name="validFrom" value="<?= h((string)($item['validFrom'] ?? date('Y-m-d'))) ?>">
@@ -945,6 +592,7 @@ tbody tr:hover:not(.editRow){
                                         </div>
                                     </div>
                                 </div>
+
                                 <div class="formActions">
                                     <button type="submit">Änderungen speichern</button>
                                 </div>
@@ -1043,7 +691,7 @@ function bindValidityFields(){
         if (!toggle || !fields) return;
 
         const update = () => {
-            fields.style.display = toggle.checked ? 'contents' : 'none';
+            fields.style.display = toggle.checked ? 'block' : 'none';
         };
 
         toggle.addEventListener('change', update);
