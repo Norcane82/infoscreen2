@@ -77,10 +77,20 @@ function runFixedCommand(string $label, string $command, int $timeoutSeconds = 1
         $exitCode = 124;
     }
 
+    $displayStatus = 'OK';
+    if ($timedOut) {
+        $displayStatus = 'Timeout';
+    } elseif ($exitCode > 0) {
+        $displayStatus = 'Fehler ' . $exitCode;
+    } elseif ($exitCode < 0 && $output === '') {
+        $displayStatus = 'Unklar';
+    }
+
     return [
         'label' => $label,
         'command' => $command,
         'exitCode' => $exitCode,
+        'displayStatus' => $displayStatus,
         'durationMs' => $durationMs,
         'output' => $output !== '' ? $output : '(keine Ausgabe)',
     ];
@@ -333,7 +343,7 @@ function appendReportLog(string $logFile, array $report): void {
     foreach ((array)($report['commands'] ?? []) as $cmd) {
         $line .= '--- ' . ($cmd['label'] ?? 'Befehl') . ' ---' . "\n";
         $line .= '$ ' . ($cmd['command'] ?? '') . "\n";
-        $line .= 'Exit: ' . ($cmd['exitCode'] ?? '') . ' | Dauer: ' . ($cmd['durationMs'] ?? '') . " ms\n";
+        $line .= 'Status: ' . ($cmd['displayStatus'] ?? ('Exit ' . ($cmd['exitCode'] ?? ''))) . ' | Dauer: ' . ($cmd['durationMs'] ?? '') . " ms\n";
         $line .= (string)($cmd['output'] ?? '') . "\n\n";
     }
 
@@ -530,7 +540,7 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
             <details class="commandBlock">
                 <summary>
                     <?= h((string)($cmd['label'] ?? 'Befehl')) ?>
-                    · Exit <?= h((string)($cmd['exitCode'] ?? '')) ?>
+                    · <?= h((string)($cmd['displayStatus'] ?? ('Exit ' . (string)($cmd['exitCode'] ?? '')))) ?>
                     · <?= h((string)($cmd['durationMs'] ?? '')) ?> ms
                 </summary>
                 <pre><code><?= h('$ ' . (string)($cmd['command'] ?? '') . "\n\n" . (string)($cmd['output'] ?? '')) ?></code></pre>
