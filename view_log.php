@@ -47,6 +47,7 @@ function parse_trace_line(string $line): array
             'message' => (string)$matches[3],
             'context' => is_array($context) ? $context : [],
             'raw' => $line,
+            'summary' => '',
         ];
     }
 
@@ -56,7 +57,34 @@ function parse_trace_line(string $line): array
         'message' => $line,
         'context' => [],
         'raw' => $line,
+        'summary' => '',
     ];
+}
+
+function system_report_summary(string $raw): string
+{
+    $lines = preg_split('/\R/', $raw);
+    if (!is_array($lines)) {
+        return '';
+    }
+
+    $summary = [];
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if (str_starts_with($trimmed, '- CPU/Load:')
+            || str_starts_with($trimmed, '- RAM:')
+            || str_starts_with($trimmed, '- Swap:')
+            || str_starts_with($trimmed, '- Swap-Bewegung:')
+            || str_starts_with($trimmed, '- Kiosk-Dienst:')) {
+            $summary[] = ltrim($trimmed, '- ');
+        }
+
+        if (count($summary) >= 5) {
+            break;
+        }
+    }
+
+    return implode("\n", $summary);
 }
 
 function parse_plain_blocks(string $content): array
@@ -92,6 +120,7 @@ function parse_plain_blocks(string $content): array
             'message' => $message,
             'context' => [],
             'raw' => $part,
+            'summary' => system_report_summary($part),
         ];
     }
 
@@ -121,6 +150,7 @@ if (is_file($logFile)) {
                             'message' => $message,
                             'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
                             'raw' => $line,
+                            'summary' => '',
                         ];
                         continue;
                     }
@@ -137,6 +167,7 @@ if (is_file($logFile)) {
                     'message' => $line,
                     'context' => [],
                     'raw' => $line,
+                    'summary' => '',
                 ];
             }
         }
@@ -182,29 +213,166 @@ function flatten_context(array $context, string $prefix = ''): array
 <title>Infoscreen2 Log</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:18px;background:#0f1115;color:#f3f4f6}
-a{color:#93c5fd;text-decoration:none}
-.btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#2563eb;color:#fff;font-weight:700}
-.btn.secondary{background:#374151}
-.card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:16px;margin-bottom:14px}
-.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;color:#cbd5e1;font-size:14px}
-.level{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}
-.level-INFO{background:#1d4ed8;color:#dbeafe}
-.level-WARN{background:#92400e;color:#ffedd5}
-.level-ERROR{background:#991b1b;color:#fee2e2}
-.level-RAW{background:#4b5563;color:#f3f4f6}
-.level-DEBUG{background:#065f46;color:#d1fae5}
-h1{margin:0 0 10px}
-.small{color:#9ca3af;font-size:13px}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:#0b0d12;padding:12px;border-radius:8px;border:1px solid #222833;overflow-x:clip;overflow-y:auto;line-height:1.45}
-.table{width:100%;border-collapse:collapse;margin-top:8px}
-.table th,.table td{padding:8px 10px;border-top:1px solid #2a2f3a;vertical-align:top;text-align:left}
-.table th{font-size:12px;text-transform:uppercase;color:#9ca3af}
-code{background:#111827;padding:2px 6px;border-radius:6px;overflow-wrap:anywhere;word-break:break-word}
-.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-.toolbar .active{background:#059669}
-.summaryBox{margin-top:10px;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #23314a;color:#dbeafe}
-.logHeader{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    margin:18px;
+    background:#0f1115;
+    color:#f3f4f6;
+}
+a{
+    color:#93c5fd;
+    text-decoration:none;
+}
+.btn{
+    display:inline-block;
+    padding:10px 14px;
+    border-radius:10px;
+    background:#2563eb;
+    color:#fff;
+    font-weight:700;
+}
+.btn.secondary{
+    background:#374151;
+}
+.card{
+    background:#171a21;
+    border:1px solid #2a2f3a;
+    border-radius:12px;
+    padding:16px;
+    margin-bottom:14px;
+}
+.card--compact{
+    padding:14px;
+}
+.meta{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    align-items:center;
+    margin-bottom:10px;
+    color:#cbd5e1;
+    font-size:14px;
+}
+.level{
+    display:inline-block;
+    padding:4px 9px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+}
+.level-INFO{
+    background:#1d4ed8;
+    color:#dbeafe;
+}
+.level-WARN{
+    background:#92400e;
+    color:#ffedd5;
+}
+.level-ERROR{
+    background:#991b1b;
+    color:#fee2e2;
+}
+.level-RAW{
+    background:#4b5563;
+    color:#f3f4f6;
+}
+.level-DEBUG{
+    background:#065f46;
+    color:#d1fae5;
+}
+h1{
+    margin:0 0 10px;
+}
+.small{
+    color:#9ca3af;
+    font-size:13px;
+}
+pre{
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    background:#0b0d12;
+    padding:12px;
+    border-radius:8px;
+    border:1px solid #222833;
+    overflow-x:clip;
+    overflow-y:auto;
+    line-height:1.45;
+    max-width:100%;
+    box-sizing:border-box;
+}
+.table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:8px;
+}
+.table th,
+.table td{
+    padding:8px 10px;
+    border-top:1px solid #2a2f3a;
+    vertical-align:top;
+    text-align:left;
+}
+.table th{
+    font-size:12px;
+    text-transform:uppercase;
+    color:#9ca3af;
+}
+code{
+    background:#111827;
+    padding:2px 6px;
+    border-radius:6px;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+}
+.toolbar{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-bottom:14px;
+}
+.toolbar .active{
+    background:#059669;
+}
+.summaryBox{
+    margin-top:10px;
+    padding:12px;
+    border-radius:10px;
+    background:#0f172a;
+    border:1px solid #23314a;
+    color:#dbeafe;
+}
+.logHeader{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+}
+.reportSummary{
+    margin-top:10px;
+    padding:12px;
+    border-radius:10px;
+    background:#0f172a;
+    border:1px solid #23314a;
+    color:#dbeafe;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    line-height:1.45;
+}
+.reportDetails{
+    margin-top:10px;
+}
+.reportDetails summary{
+    cursor:pointer;
+    color:#cbd5e1;
+    font-weight:700;
+}
+.reportDetails pre{
+    max-height:720px;
+}
 </style>
 </head>
 <body>
@@ -234,9 +402,9 @@ code{background:#111827;padding:2px 6px;border-radius:6px;overflow-wrap:anywhere
 <?php if (!$entries): ?>
   <div class="card">Noch keine Logeinträge vorhanden.</div>
 <?php else: ?>
-  <?php foreach ($entries as $entry): ?>
+  <?php foreach ($entries as $index => $entry): ?>
     <?php $flatContext = flatten_context($entry['context']); ?>
-    <div class="card">
+    <div class="card <?= $selectedKey === 'system_report' ? 'card--compact' : '' ?>">
       <div class="meta">
         <span><?= h($entry['time'] !== '' ? $entry['time'] : 'ohne Zeitstempel') ?></span>
         <span class="level level-<?= h($entry['level']) ?>"><?= h($entry['level']) ?></span>
@@ -248,7 +416,16 @@ code{background:#111827;padding:2px 6px;border-radius:6px;overflow-wrap:anywhere
         <div class="summaryBox"><?= h((string)$entry['context']['summary']) ?></div>
       <?php endif; ?>
 
-      <?php if ($flatContext): ?>
+      <?php if ($selectedKey === 'system_report'): ?>
+        <?php if ((string)($entry['summary'] ?? '') !== ''): ?>
+            <div class="reportSummary"><?= h((string)$entry['summary']) ?></div>
+        <?php endif; ?>
+
+        <details class="reportDetails">
+          <summary>Komplette Systemauswertung anzeigen</summary>
+          <pre><?= h($entry['raw']) ?></pre>
+        </details>
+      <?php elseif ($flatContext): ?>
         <table class="table">
           <thead>
             <tr>
@@ -271,18 +448,11 @@ code{background:#111827;padding:2px 6px;border-radius:6px;overflow-wrap:anywhere
           <pre><?= h(json_encode($entry['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '') ?></pre>
         </details>
       <?php else: ?>
-        <?php if ($selectedKey === 'system_report'): ?>
-            <details style="margin-top:10px" open>
-              <summary class="small">Systemauswertung anzeigen</summary>
-              <pre><?= h($entry['raw']) ?></pre>
-            </details>
-        <?php else: ?>
-            <p class="small" style="margin-top:10px">Kein Kontext vorhanden.</p>
-            <details style="margin-top:10px">
-              <summary class="small">Rohen Eintrag anzeigen</summary>
-              <pre><?= h($entry['raw']) ?></pre>
-            </details>
-        <?php endif; ?>
+        <p class="small" style="margin-top:10px">Kein Kontext vorhanden.</p>
+        <details style="margin-top:10px">
+          <summary class="small">Rohen Eintrag anzeigen</summary>
+          <pre><?= h($entry['raw']) ?></pre>
+        </details>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
