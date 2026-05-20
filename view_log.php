@@ -89,9 +89,30 @@ function system_report_summary(string $raw): string
 
 function parse_plain_blocks(string $content): array
 {
-    $content = trim($content);
+    $content = trim(str_replace(["\r\n", "\r"], "\n", $content));
     if ($content === '') {
         return [];
+    }
+
+    $entries = [];
+
+    if (preg_match_all('/^={20,}\nSYSTEM REPORT\s+([^\n]+)\n={20,}\n(.*?)(?=^={20,}\nSYSTEM REPORT\s+|\z)/ms', $content, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $match) {
+            $time = trim((string)$match[1]);
+            $body = trim((string)$match[2]);
+            $raw = "SYSTEM REPORT " . $time . "\n" . $body;
+
+            $entries[] = [
+                'time' => $time,
+                'level' => 'INFO',
+                'message' => 'Systemauswertung ' . $time,
+                'context' => [],
+                'raw' => $raw,
+                'summary' => system_report_summary($body),
+            ];
+        }
+
+        return $entries;
     }
 
     $parts = preg_split('/\n={20,}\n/', "\n" . $content);
@@ -99,7 +120,6 @@ function parse_plain_blocks(string $content): array
         return [];
     }
 
-    $entries = [];
     foreach ($parts as $part) {
         $part = trim($part);
         if ($part === '') {
