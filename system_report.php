@@ -400,7 +400,83 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
 <title>Infoscreen 2 Systemauswertung</title>
 <link rel="stylesheet" href="assets/css/admin.css?v=<?= $adminCssVersion ?>">
 <style>
-.reportHeader{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.reportMeta{color:#667085;font-size:.92rem}.reportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.reportTile{border:1px solid var(--line-soft);background:#f8fafc;border-radius:14px;padding:14px}.reportTile__top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}.reportTile__label{font-weight:800}.reportTile__value{font-size:1.1rem;font-weight:800;margin-bottom:6px}.commandBlock{border:1px solid var(--line-soft);border-radius:14px;margin-top:12px;overflow:hidden;background:#fff}.commandBlock summary{cursor:pointer;padding:12px 14px;font-weight:800;background:#f8fafc}.commandBlock pre{margin:0;padding:14px;overflow:auto;background:#0f172a;color:#e5e7eb;font-size:.86rem;line-height:1.45}
+.reportHeader{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+}
+.reportMeta{
+    color:#667085;
+    font-size:.92rem;
+}
+.reportGrid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:12px;
+}
+.reportTile{
+    border:1px solid var(--line-soft);
+    background:#f8fafc;
+    border-radius:14px;
+    padding:14px;
+    min-width:0;
+}
+.reportTile__top{
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+}
+.reportTile__label{
+    font-weight:800;
+}
+.reportTile__value{
+    font-size:1.1rem;
+    font-weight:800;
+    margin-bottom:6px;
+}
+.commandBlock{
+    border:1px solid var(--line-soft);
+    border-radius:14px;
+    margin-top:12px;
+    overflow:hidden;
+    background:#fff;
+    max-width:100%;
+    min-width:0;
+}
+.commandBlock summary{
+    cursor:pointer;
+    padding:12px 14px;
+    font-weight:800;
+    background:#f8fafc;
+}
+.commandBlock pre{
+    display:block;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    box-sizing:border-box;
+    margin:0;
+    padding:14px;
+    overflow-x:clip;
+    overflow-y:auto;
+    white-space:pre-wrap !important;
+    overflow-wrap:anywhere !important;
+    word-wrap:break-word !important;
+    word-break:break-all;
+    background:#0f172a;
+    color:#e5e7eb;
+    font-size:.86rem;
+    line-height:1.45;
+}
+.commandBlock code{
+    white-space:inherit;
+    overflow-wrap:inherit;
+    word-break:inherit;
+}
 </style>
 </head>
 <body>
@@ -457,7 +533,7 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
                     · Exit <?= h((string)($cmd['exitCode'] ?? '')) ?>
                     · <?= h((string)($cmd['durationMs'] ?? '')) ?> ms
                 </summary>
-                <pre><?= h('$ ' . (string)($cmd['command'] ?? '') . "\n\n" . (string)($cmd['output'] ?? '')) ?></pre>
+                <pre><code><?= h('$ ' . (string)($cmd['command'] ?? '') . "\n\n" . (string)($cmd['output'] ?? '')) ?></code></pre>
             </details>
         <?php endforeach; ?>
     </div>
