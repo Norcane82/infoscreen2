@@ -150,6 +150,7 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
             <a class="btn" href="index.php" target="_blank">Player öffnen</a>
             <a class="btn" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
             <a class="btn" href="status.php" target="_blank">Status JSON</a>
+            <a class="btn" href="system_report.php">Systemauswertung</a>
             <a class="btn" href="view_log.php">Logs anzeigen</a>
             <a class="btn" href="backups.php">Backups</a>
             <form action="watchdog_reset.php" method="post" style="display:inline">
