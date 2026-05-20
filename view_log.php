@@ -19,6 +19,11 @@ $availableLogs = [
         'file' => __DIR__ . '/data/logs/player_trace.log',
         'mode' => 'trace_plain',
     ],
+    'system_report' => [
+        'label' => 'Systemauswertung',
+        'file' => __DIR__ . '/data/logs/system_report.log',
+        'mode' => 'plain_block',
+    ],
 ];
 
 $selectedKey = (string)($_GET['file'] ?? 'app');
@@ -54,42 +59,86 @@ function parse_trace_line(string $line): array
     ];
 }
 
-if (is_file($logFile)) {
-    $lines = @file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (is_array($lines)) {
-        foreach ($lines as $line) {
-            if ($selectedLog['mode'] === 'jsonl' || $selectedLog['mode'] === 'status_jsonl') {
-                $decoded = json_decode($line, true);
+function parse_plain_blocks(string $content): array
+{
+    $content = trim($content);
+    if ($content === '') {
+        return [];
+    }
 
-                if (is_array($decoded)) {
-                    $message = (string)($decoded['message'] ?? '');
-                    if ($selectedLog['mode'] === 'status_jsonl' && $message !== 'Status snapshot') {
+    $parts = preg_split('/\n={20,}\n/', "\n" . $content);
+    if (!is_array($parts)) {
+        return [];
+    }
+
+    $entries = [];
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+
+        $time = '';
+        $message = 'Systemauswertung';
+
+        if (preg_match('/SYSTEM REPORT\s+([^\n]+)/', $part, $matches)) {
+            $time = trim((string)$matches[1]);
+            $message = 'Systemauswertung ' . $time;
+        }
+
+        $entries[] = [
+            'time' => $time,
+            'level' => 'INFO',
+            'message' => $message,
+            'context' => [],
+            'raw' => $part,
+        ];
+    }
+
+    return $entries;
+}
+
+if (is_file($logFile)) {
+    if ($selectedLog['mode'] === 'plain_block') {
+        $content = (string)@file_get_contents($logFile);
+        $entries = parse_plain_blocks($content);
+    } else {
+        $lines = @file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                if ($selectedLog['mode'] === 'jsonl' || $selectedLog['mode'] === 'status_jsonl') {
+                    $decoded = json_decode($line, true);
+
+                    if (is_array($decoded)) {
+                        $message = (string)($decoded['message'] ?? '');
+                        if ($selectedLog['mode'] === 'status_jsonl' && $message !== 'Status snapshot') {
+                            continue;
+                        }
+
+                        $entries[] = [
+                            'time' => (string)($decoded['time'] ?? ''),
+                            'level' => strtoupper((string)($decoded['level'] ?? 'INFO')),
+                            'message' => $message,
+                            'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
+                            'raw' => $line,
+                        ];
                         continue;
                     }
+                }
 
-                    $entries[] = [
-                        'time' => (string)($decoded['time'] ?? ''),
-                        'level' => strtoupper((string)($decoded['level'] ?? 'INFO')),
-                        'message' => $message,
-                        'context' => is_array($decoded['context'] ?? null) ? $decoded['context'] : [],
-                        'raw' => $line,
-                    ];
+                if ($selectedLog['mode'] === 'trace_plain') {
+                    $entries[] = parse_trace_line($line);
                     continue;
                 }
-            }
 
-            if ($selectedLog['mode'] === 'trace_plain') {
-                $entries[] = parse_trace_line($line);
-                continue;
+                $entries[] = [
+                    'time' => '',
+                    'level' => 'RAW',
+                    'message' => $line,
+                    'context' => [],
+                    'raw' => $line,
+                ];
             }
-
-            $entries[] = [
-                'time' => '',
-                'level' => 'RAW',
-                'message' => $line,
-                'context' => [],
-                'raw' => $line,
-            ];
         }
     }
 }
@@ -136,6 +185,7 @@ function flatten_context(array $context, string $prefix = ''): array
 body{font-family:Arial,Helvetica,sans-serif;margin:18px;background:#0f1115;color:#f3f4f6}
 a{color:#93c5fd;text-decoration:none}
 .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#2563eb;color:#fff;font-weight:700}
+.btn.secondary{background:#374151}
 .card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:16px;margin-bottom:14px}
 .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;color:#cbd5e1;font-size:14px}
 .level{display:inline-block;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}
@@ -146,28 +196,40 @@ a{color:#93c5fd;text-decoration:none}
 .level-DEBUG{background:#065f46;color:#d1fae5}
 h1{margin:0 0 10px}
 .small{color:#9ca3af;font-size:13px}
-pre{white-space:pre-wrap;word-break:break-word;background:#0b0d12;padding:12px;border-radius:8px;border:1px solid #222833;overflow:auto}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:#0b0d12;padding:12px;border-radius:8px;border:1px solid #222833;overflow-x:clip;overflow-y:auto;line-height:1.45}
 .table{width:100%;border-collapse:collapse;margin-top:8px}
 .table th,.table td{padding:8px 10px;border-top:1px solid #2a2f3a;vertical-align:top;text-align:left}
 .table th{font-size:12px;text-transform:uppercase;color:#9ca3af}
-code{background:#111827;padding:2px 6px;border-radius:6px}
+code{background:#111827;padding:2px 6px;border-radius:6px;overflow-wrap:anywhere;word-break:break-word}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar .active{background:#059669}
 .summaryBox{margin-top:10px;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #23314a;color:#dbeafe}
+.logHeader{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
 </style>
 </head>
 <body>
 
 <div class="toolbar">
-  <a class="btn" href="admin.php">Zurück zur Verwaltung</a>
-  <a class="btn" href="view_log.php?file=app">App Log</a>
-  <a class="btn" href="view_log.php?file=status">Status-Snapshots</a>
-  <a class="btn" href="view_log.php?file=trace">Player Trace Log</a>
-  <a class="btn" href="view_log.php?file=<?= h($selectedKey) ?>">Neu laden</a>
+  <a class="btn secondary" href="admin.php?page=master">Zurück zur Master-Verwaltung</a>
+  <a class="btn <?= $selectedKey === 'app' ? 'active' : '' ?>" href="view_log.php?file=app">App Log</a>
+  <a class="btn <?= $selectedKey === 'status' ? 'active' : '' ?>" href="view_log.php?file=status">Status-Snapshots</a>
+  <a class="btn <?= $selectedKey === 'trace' ? 'active' : '' ?>" href="view_log.php?file=trace">Player Trace Log</a>
+  <a class="btn <?= $selectedKey === 'system_report' ? 'active' : '' ?>" href="view_log.php?file=system_report">Systemauswertung</a>
+  <a class="btn secondary" href="view_log.php?file=<?= h($selectedKey) ?>">Neu laden</a>
 </div>
 
-<h1><?= h($selectedLog['label']) ?></h1>
-<p class="small">Datei: <code><?= h($logFile) ?></code></p>
-<p class="small">Angezeigt werden die letzten <?= count($entries) ?> Einträge.</p>
+<div class="logHeader">
+    <div>
+        <h1><?= h($selectedLog['label']) ?></h1>
+        <p class="small">Datei: <code><?= h($logFile) ?></code></p>
+        <p class="small">Angezeigt werden die letzten <?= count($entries) ?> Einträge.</p>
+    </div>
+    <?php if ($selectedKey === 'system_report'): ?>
+        <div>
+            <a class="btn" href="system_report.php">Neue Systemauswertung öffnen</a>
+        </div>
+    <?php endif; ?>
+</div>
 
 <?php if (!$entries): ?>
   <div class="card">Noch keine Logeinträge vorhanden.</div>
@@ -209,11 +271,18 @@ code{background:#111827;padding:2px 6px;border-radius:6px}
           <pre><?= h(json_encode($entry['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '') ?></pre>
         </details>
       <?php else: ?>
-        <p class="small" style="margin-top:10px">Kein Kontext vorhanden.</p>
-        <details style="margin-top:10px">
-          <summary class="small">Rohen Eintrag anzeigen</summary>
-          <pre><?= h($entry['raw']) ?></pre>
-        </details>
+        <?php if ($selectedKey === 'system_report'): ?>
+            <details style="margin-top:10px" open>
+              <summary class="small">Systemauswertung anzeigen</summary>
+              <pre><?= h($entry['raw']) ?></pre>
+            </details>
+        <?php else: ?>
+            <p class="small" style="margin-top:10px">Kein Kontext vorhanden.</p>
+            <details style="margin-top:10px">
+              <summary class="small">Rohen Eintrag anzeigen</summary>
+              <pre><?= h($entry['raw']) ?></pre>
+            </details>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
