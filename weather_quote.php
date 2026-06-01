@@ -101,17 +101,97 @@ function weather_code_label(int $code): string
     return $labels[$code] ?? 'Wetterlage unbekannt';
 }
 
-function weather_icon(int $code): string
+function weather_icon_type(int $code): string
 {
-    if ($code === 0) { return '☀️'; }
-    if (in_array($code, [1, 2], true)) { return '🌤️'; }
-    if ($code === 3) { return '☁️'; }
-    if (in_array($code, [45, 48], true)) { return '🌫️'; }
-    if (($code >= 51 && $code <= 67) || ($code >= 80 && $code <= 82)) { return '🌧️'; }
-    if (($code >= 71 && $code <= 77) || ($code >= 85 && $code <= 86)) { return '❄️'; }
-    if ($code >= 95) { return '⛈️'; }
+    if ($code === 0) {
+        return 'sun';
+    }
 
-    return '🌡️';
+    if (in_array($code, [1, 2], true)) {
+        return 'partly';
+    }
+
+    if ($code === 3) {
+        return 'cloud';
+    }
+
+    if (in_array($code, [45, 48], true)) {
+        return 'fog';
+    }
+
+    if (($code >= 51 && $code <= 67) || ($code >= 80 && $code <= 82)) {
+        return 'rain';
+    }
+
+    if (($code >= 71 && $code <= 77) || ($code >= 85 && $code <= 86)) {
+        return 'snow';
+    }
+
+    if ($code >= 95) {
+        return 'storm';
+    }
+
+    return 'unknown';
+}
+
+function weather_icon_svg(int $code): string
+{
+    $type = weather_icon_type($code);
+
+    $sun = '<circle cx="96" cy="96" r="36" fill="#facc15"/>
+        <g stroke="#fde68a" stroke-width="10" stroke-linecap="round">
+            <line x1="96" y1="18" x2="96" y2="42"/>
+            <line x1="96" y1="150" x2="96" y2="174"/>
+            <line x1="18" y1="96" x2="42" y2="96"/>
+            <line x1="150" y1="96" x2="174" y2="96"/>
+            <line x1="41" y1="41" x2="58" y2="58"/>
+            <line x1="134" y1="134" x2="151" y2="151"/>
+            <line x1="151" y1="41" x2="134" y2="58"/>
+            <line x1="58" y1="134" x2="41" y2="151"/>
+        </g>';
+
+    $cloud = '<path d="M68 134h82c20 0 36-15 36-34s-16-34-36-34c-4 0-8 1-12 2C129 48 109 36 86 36c-30 0-55 22-59 51C11 93 0 108 0 125c0 22 18 39 40 39h28v-30z" fill="#e5e7eb" transform="translate(18 16)"/>
+        <path d="M86 57c21 0 39 13 45 31 6-3 13-5 20-5 18 0 33 12 38 29-4-27-27-48-55-48-5 0-10 1-15 2-11-16-30-27-52-27-30 0-55 21-61 50 9-19 28-32 50-32h30z" fill="#ffffff" opacity=".75" transform="translate(18 16)"/>';
+
+    $rain = '<g stroke="#93c5fd" stroke-width="10" stroke-linecap="round">
+            <line x1="78" y1="150" x2="66" y2="176"/>
+            <line x1="116" y1="150" x2="104" y2="176"/>
+            <line x1="154" y1="150" x2="142" y2="176"/>
+        </g>';
+
+    $snow = '<g fill="#dbeafe" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700">
+            <text x="62" y="178">*</text>
+            <text x="104" y="178">*</text>
+            <text x="146" y="178">*</text>
+        </g>';
+
+    $storm = '<polygon points="104,138 82,190 115,164 101,204 152,142 122,154 136,138" fill="#fde047"/>';
+
+    $fog = '<g stroke="#cbd5e1" stroke-width="10" stroke-linecap="round" opacity=".9">
+            <line x1="38" y1="148" x2="166" y2="148"/>
+            <line x1="54" y1="172" x2="182" y2="172"/>
+            <line x1="30" y1="196" x2="150" y2="196"/>
+        </g>';
+
+    if ($type === 'sun') {
+        $body = $sun;
+    } elseif ($type === 'partly') {
+        $body = '<g transform="translate(-12 -10) scale(.78)">' . $sun . '</g><g transform="translate(28 44) scale(.8)">' . $cloud . '</g>';
+    } elseif ($type === 'cloud') {
+        $body = '<g transform="translate(18 34) scale(.9)">' . $cloud . '</g>';
+    } elseif ($type === 'rain') {
+        $body = '<g transform="translate(18 20) scale(.9)">' . $cloud . '</g>' . $rain;
+    } elseif ($type === 'snow') {
+        $body = '<g transform="translate(18 20) scale(.9)">' . $cloud . '</g>' . $snow;
+    } elseif ($type === 'storm') {
+        $body = '<g transform="translate(18 20) scale(.9)">' . $cloud . '</g>' . $storm;
+    } elseif ($type === 'fog') {
+        $body = '<g transform="translate(18 0) scale(.9)">' . $cloud . '</g>' . $fog;
+    } else {
+        $body = '<circle cx="96" cy="96" r="58" fill="#64748b"/><text x="96" y="112" text-anchor="middle" font-size="56" font-family="Arial" font-weight="800" fill="#fff">?</text>';
+    }
+
+    return '<svg class="weatherSvg" viewBox="0 0 192 212" role="img" aria-label="Wetter-Symbol" xmlns="http://www.w3.org/2000/svg">' . $body . '</svg>';
 }
 
 function format_number(float|int|null $value, int $decimals = 0): string
@@ -356,7 +436,7 @@ $daily = is_array($data['daily'] ?? null) ? $data['daily'] : [];
 
 $weatherCode = isset($current['weather_code']) ? (int)$current['weather_code'] : -1;
 $weatherLabel = $weatherCode >= 0 ? weather_code_label($weatherCode) : 'Wetterdaten nicht verfügbar';
-$weatherIcon = $weatherCode >= 0 ? weather_icon($weatherCode) : '⚠️';
+$weatherIconSvg = $weatherCode >= 0 ? weather_icon_svg($weatherCode) : weather_icon_svg(-1);
 
 $temp = isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null;
 $apparentTemp = isset($current['apparent_temperature']) ? (float)$current['apparent_temperature'] : null;
@@ -440,7 +520,17 @@ h1{margin:0;font-size:clamp(42px,5vw,90px);line-height:1}
     backdrop-filter:blur(10px);
 }
 .weatherTop{display:flex;align-items:center;gap:clamp(18px,3vw,44px);margin-bottom:clamp(20px,3vw,38px)}
-.weatherIcon{font-size:clamp(82px,9vw,160px);line-height:1}
+.weatherIcon{
+    width:clamp(126px,12vw,220px);
+    min-width:clamp(126px,12vw,220px);
+    line-height:1;
+}
+.weatherSvg{
+    display:block;
+    width:100%;
+    height:auto;
+    filter:drop-shadow(0 18px 28px rgba(0,0,0,.28));
+}
 .temperature{font-size:clamp(76px,10vw,170px);font-weight:900;line-height:.9;letter-spacing:-.06em}
 .condition{font-size:clamp(26px,3vw,54px);font-weight:800;margin:0 0 10px 0}
 .feels{color:var(--muted);font-size:clamp(18px,1.6vw,28px)}
@@ -484,7 +574,7 @@ h1{margin:0;font-size:clamp(42px,5vw,90px);line-height:1}
     <section class="main">
         <article class="weatherCard">
             <div class="weatherTop">
-                <div class="weatherIcon"><?= wh($weatherIcon) ?></div>
+                <div class="weatherIcon"><?= $weatherIconSvg ?></div>
                 <div>
                     <div class="temperature"><?= wh(format_number($temp, 0)) ?>°</div>
                     <p class="condition"><?= wh($weatherLabel) ?></p>
