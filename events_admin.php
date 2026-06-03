@@ -48,6 +48,7 @@ function ea_default_data(): array
         'title' => 'Aktuelle Veranstaltungen',
         'maxItems' => 3,
         'panelOpacity' => 85,
+        'totalDescriptionLimit' => 3000,
         'events' => [
             [
                 'date' => '',
@@ -98,6 +99,21 @@ function ea_clamp_opacity(mixed $value): int
     return $opacity;
 }
 
+function ea_clamp_total_description_limit(mixed $value): int
+{
+    $limit = (int)$value;
+
+    if ($limit < 300) {
+        return 300;
+    }
+
+    if ($limit > 9000) {
+        return 9000;
+    }
+
+    return $limit;
+}
+
 function ea_normalize_color(string $value): string
 {
     $value = trim($value);
@@ -119,6 +135,7 @@ function ea_normalize_data(array $data): array
     }
 
     $panelOpacity = ea_clamp_opacity($data['panelOpacity'] ?? $default['panelOpacity']);
+    $totalDescriptionLimit = ea_clamp_total_description_limit($data['totalDescriptionLimit'] ?? $default['totalDescriptionLimit']);
 
     $events = is_array($data['events'] ?? null) ? $data['events'] : [];
     $normalizedEvents = [];
@@ -142,6 +159,7 @@ function ea_normalize_data(array $data): array
         'title' => $title,
         'maxItems' => 3,
         'panelOpacity' => $panelOpacity,
+        'totalDescriptionLimit' => $totalDescriptionLimit,
         'events' => $normalizedEvents,
     ];
 }
@@ -166,6 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'title' => trim((string)($_POST['pageTitle'] ?? 'Aktuelle Veranstaltungen')),
         'maxItems' => 3,
         'panelOpacity' => ea_clamp_opacity($_POST['panelOpacity'] ?? 85),
+        'totalDescriptionLimit' => ea_clamp_total_description_limit($_POST['totalDescriptionLimit'] ?? 3000),
         'events' => $events,
     ];
 
@@ -383,6 +402,12 @@ textarea{
                     <p class="small">Empfohlen: 85 %. 100 % ist vollständig deckend, 0 % ist komplett transparent.</p>
                     <div class="opacityPreview" style="background:rgba(59,130,246,<?= ((int)$data['panelOpacity']) / 100 ?>)"></div>
                 </div>
+
+                <div class="field">
+                    <label>Gesamtes Zeichenbudget</label>
+                    <input type="number" name="totalDescriptionLimit" min="300" max="9000" step="100" value="<?= (int)$data['totalDescriptionLimit'] ?>">
+                    <p class="small">Dieses Gesamtbudget wird automatisch durch die Anzahl der aktiven Veranstaltungen geteilt.</p>
+                </div>
             </div>
         </div>
 
@@ -436,7 +461,7 @@ textarea{
                         <span class="charCounter" data-counter-for="description-<?= $i ?>">0 / 3000</span>
                     </div>
                     <textarea id="description-<?= $i ?>" name="description[<?= $i ?>]" data-description><?= ea_h((string)$event['description']) ?></textarea>
-                    <p class="small">Zeichenlimit richtet sich nach aktiven Veranstaltungen: 1 aktiv = 3000, 2 aktiv = 2000, 3 aktiv = 1000 Zeichen je Beschreibung.</p>
+                    <p class="small">Das Gesamtbudget wird durch die aktiven Veranstaltungen geteilt. Beispiel bei 3000 Zeichen: 1 aktiv = 3000, 2 aktiv = 1500, 3 aktiv = 1000 Zeichen je Beschreibung.</p>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -450,16 +475,12 @@ textarea{
 <script>
 function getDescriptionLimit(){
     const activeCount = Array.from(document.querySelectorAll('[data-event-enabled]')).filter((box) => box.checked).length;
+    const budgetInput = document.querySelector('[name="totalDescriptionLimit"]');
+    const totalBudget = parseInt(budgetInput ? budgetInput.value : '3000', 10);
+    const safeTotalBudget = Number.isFinite(totalBudget) ? Math.max(300, Math.min(9000, totalBudget)) : 3000;
+    const divisor = Math.max(1, activeCount);
 
-    if (activeCount <= 1) {
-        return 3000;
-    }
-
-    if (activeCount === 2) {
-        return 2000;
-    }
-
-    return 1000;
+    return Math.floor(safeTotalBudget / divisor);
 }
 
 function updateCounters(){
@@ -487,6 +508,11 @@ document.querySelectorAll('[data-event-enabled]').forEach((box) => {
 document.querySelectorAll('[data-description]').forEach((textarea) => {
     textarea.addEventListener('input', updateCounters);
 });
+
+const totalBudgetInput = document.querySelector('[name="totalDescriptionLimit"]');
+if (totalBudgetInput) {
+    totalBudgetInput.addEventListener('input', updateCounters);
+}
 
 updateCounters();
 </script>
