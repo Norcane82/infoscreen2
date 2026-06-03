@@ -4,47 +4,126 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/bootstrap.php';
 
 $config = load_config();
+
 $eventsFile = __DIR__ . '/data/events.json';
 
-function es_h(string $value): string { return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function es_read_json(string $file, array $fallback = []): array {
-    if (!is_file($file)) { return $fallback; }
+function es_h(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function es_read_json(string $file, array $fallback = []): array
+{
+    if (!is_file($file)) {
+        return $fallback;
+    }
+
     $decoded = json_decode((string)@file_get_contents($file), true);
     return is_array($decoded) ? $decoded : $fallback;
 }
-function es_logo_url(array $config): string {
+
+function es_logo_url(array $config): string
+{
     $logo = trim((string)($config['clock']['logo'] ?? ''));
-    if ($logo === '') { return ''; }
-    if (preg_match('#^https?://#i', $logo)) { return $logo; }
+    if ($logo === '') {
+        return '';
+    }
+
+    if (preg_match('#^https?://#i', $logo)) {
+        return $logo;
+    }
+
     return $logo;
 }
-function es_date_label(string $date): string {
+
+function es_date_label(string $date): string
+{
     $ts = strtotime($date);
-    return $ts ? date('d.m.Y', $ts) : $date;
-}
-function es_is_future_or_today(array $event): bool {
-    $date = trim((string)($event['date'] ?? ''));
-    if ($date === '') { return true; }
-    $eventTs = strtotime($date . ' 23:59:59');
-    return !$eventTs || $eventTs >= strtotime('today 00:00:00');
+    if (!$ts) {
+        return $date;
+    }
+
+    return date('d.m.Y', $ts);
 }
 
-$data = es_read_json($eventsFile, ['title'=>'Aktuelle Veranstaltungen','maxItems'=>3,'events'=>[]]);
-$title = trim((string)($data['title'] ?? 'Aktuelle Veranstaltungen')) ?: 'Aktuelle Veranstaltungen';
+function es_is_future_or_today(array $event): bool
+{
+    $date = trim((string)($event['date'] ?? ''));
+    if ($date === '') {
+        return true;
+    }
+
+    $eventTs = strtotime($date . ' 23:59:59');
+    if (!$eventTs) {
+        return true;
+    }
+
+    return $eventTs >= strtotime('today 00:00:00');
+}
+
+function es_clamp_opacity(mixed $value): int
+{
+    $opacity = (int)$value;
+
+    if ($opacity < 0) {
+        return 0;
+    }
+
+    if ($opacity > 100) {
+        return 100;
+    }
+
+    return $opacity;
+}
+
+$data = es_read_json($eventsFile, [
+    'title' => 'Aktuelle Veranstaltungen',
+    'maxItems' => 3,
+    'panelOpacity' => 85,
+    'events' => [],
+]);
+
+$title = trim((string)($data['title'] ?? 'Aktuelle Veranstaltungen'));
+if ($title === '') {
+    $title = 'Aktuelle Veranstaltungen';
+}
+
 $maxItems = (int)($data['maxItems'] ?? 3);
-if ($maxItems < 1 || $maxItems > 3) { $maxItems = 3; }
-$panelOpacityPercent = (int)($data['panelOpacity'] ?? 85);
-if ($panelOpacityPercent < 0 || $panelOpacityPercent > 100) { $panelOpacityPercent = 85; }
+if ($maxItems < 1 || $maxItems > 3) {
+    $maxItems = 3;
+}
+
+$panelOpacityPercent = es_clamp_opacity($data['panelOpacity'] ?? 85);
 $panelOpacity = max(0, min(1, $panelOpacityPercent / 100));
+
 $events = is_array($data['events'] ?? null) ? $data['events'] : [];
 $filtered = [];
+
 foreach ($events as $event) {
-    if (!is_array($event) || empty($event['enabled']) || !es_is_future_or_today($event)) { continue; }
+    if (!is_array($event)) {
+        continue;
+    }
+
+    if (empty($event['enabled'])) {
+        continue;
+    }
+
+    if (!es_is_future_or_today($event)) {
+        continue;
+    }
+
     $filtered[] = $event;
 }
+
 usort($filtered, static function (array $a, array $b): int {
-    return strcmp(trim((string)($a['date'] ?? '9999-12-31')) . ' ' . trim((string)($a['time'] ?? '23:59')), trim((string)($b['date'] ?? '9999-12-31')) . ' ' . trim((string)($b['time'] ?? '23:59')));
+    $dateA = trim((string)($a['date'] ?? '9999-12-31'));
+    $dateB = trim((string)($b['date'] ?? '9999-12-31'));
+    $timeA = trim((string)($a['time'] ?? '23:59'));
+    $timeB = trim((string)($b['time'] ?? '23:59'));
+
+    return strcmp($dateA . ' ' . $timeA, $dateB . ' ' . $timeB);
 });
+
 $visibleEvents = array_slice($filtered, 0, $maxItems);
 $logoUrl = es_logo_url($config);
 ?>
@@ -65,8 +144,15 @@ $logoUrl = es_logo_url($config);
     --accent:#000000;
     --accent2:#0f172a;
 }
-*{box-sizing:border-box}
-html,body{width:100%;height:100%;margin:0}
+*{
+    box-sizing:border-box;
+}
+html,
+body{
+    width:100%;
+    height:100%;
+    margin:0;
+}
 body{
     font-family:Arial,Helvetica,sans-serif;
     background:var(--bg);
@@ -176,25 +262,71 @@ h1{
     gap:24px;
 }
 @media (max-width:1000px){
-    body{overflow:auto}
-    .header,.footer{flex-direction:column}
-    .events{grid-template-columns:1fr}
-    .eventCard{min-height:auto}
-    .logoBox{justify-content:flex-start}
+    body{
+        overflow:auto;
+    }
+    .header,
+    .footer{
+        flex-direction:column;
+    }
+    .events{
+        grid-template-columns:1fr;
+    }
+    .eventCard{
+        min-height:auto;
+    }
+    .logoBox{
+        justify-content:flex-start;
+    }
 }
 </style>
 </head>
 <body>
 <main class="slide">
-<header class="header"><div><p class="kicker">Infoscreen 2</p><h1><?= es_h($title) ?></h1></div><?php if ($logoUrl !== ''): ?><div class="logoBox"><img src="<?= es_h($logoUrl) ?>" alt="Logo"></div><?php endif; ?></header>
-<section class="events">
-<?php if (!$visibleEvents): ?><div class="empty">Derzeit sind keine aktuellen Veranstaltungen eingetragen.</div><?php else: ?>
-<?php foreach ($visibleEvents as $event): ?>
-<?php $date=trim((string)($event['date']??'')); $time=trim((string)($event['time']??'')); $eventTitle=trim((string)($event['title']??'')); $location=trim((string)($event['location']??'')); $description=trim((string)($event['description']??'')); ?>
-<article class="eventCard"><div class="eventDate"><?= es_h(es_date_label($date)) ?></div><?php if ($time !== ''): ?><div class="eventTime"><?= es_h($time) ?></div><?php endif; ?><div class="eventTitle"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div><?php if ($location !== ''): ?><div class="eventLocation"><?= es_h($location) ?></div><?php endif; ?><?php if ($description !== ''): ?><div class="eventDescription"><?= nl2br(es_h($description)) ?></div><?php endif; ?></article>
-<?php endforeach; ?><?php endif; ?>
-</section>
-<footer class="footer"><div>Es werden maximal <?= (int)$maxItems ?> aktuelle Veranstaltungen angezeigt. · Deckkraft: <?= (int)$panelOpacityPercent ?>%</div><div>Stand: <?= es_h(date('d.m.Y H:i')) ?></div></footer>
+    <header class="header">
+        <div>
+            <h1><?= es_h($title) ?></h1>
+        </div>
+        <?php if ($logoUrl !== ''): ?>
+            <div class="logoBox">
+                <img src="<?= es_h($logoUrl) ?>" alt="Logo">
+            </div>
+        <?php endif; ?>
+    </header>
+
+    <section class="events">
+        <?php if (!$visibleEvents): ?>
+            <div class="empty">Derzeit sind keine aktuellen Veranstaltungen eingetragen.</div>
+        <?php else: ?>
+            <?php foreach ($visibleEvents as $event): ?>
+                <?php
+                    $date = trim((string)($event['date'] ?? ''));
+                    $time = trim((string)($event['time'] ?? ''));
+                    $eventTitle = trim((string)($event['title'] ?? ''));
+                    $location = trim((string)($event['location'] ?? ''));
+                    $description = trim((string)($event['description'] ?? ''));
+                ?>
+                <article class="eventCard">
+                    <div class="eventDate"><?= es_h(es_date_label($date)) ?></div>
+                    <?php if ($time !== ''): ?>
+                        <div class="eventTime"><?= es_h($time) ?></div>
+                    <?php endif; ?>
+                    <div class="eventTitle"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div>
+                    <?php if ($location !== ''): ?>
+                        <div class="eventLocation"><?= es_h($location) ?></div>
+                    <?php endif; ?>
+                    <?php if ($description !== ''): ?>
+                        <div class="eventDescription"><?= nl2br(es_h($description)) ?></div>
+                    <?php endif; ?>
+                </article>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </section>
+
+    <footer class="footer">
+        <div>Es werden maximal <?= (int)$maxItems ?> aktuelle Veranstaltungen angezeigt. · Deckkraft: <?= (int)$panelOpacityPercent ?>%</div>
+        <div>Stand: <?= es_h(date('d.m.Y H:i')) ?></div>
+    </footer>
 </main>
 </body>
 </html>
