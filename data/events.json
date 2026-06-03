@@ -1,6 +1,7 @@
 {
   "title": "Aktuelle Veranstaltungen",
   "maxItems": 3,
+  "panelOpacity": 85,
   "events": [
     {
       "date": "",
