@@ -55,6 +55,8 @@ function ea_default_data(): array
                 'title' => '',
                 'location' => '',
                 'description' => '',
+                'titleBold' => true,
+                'titleColor' => '#000000',
                 'enabled' => false,
             ],
             [
@@ -63,6 +65,8 @@ function ea_default_data(): array
                 'title' => '',
                 'location' => '',
                 'description' => '',
+                'titleBold' => true,
+                'titleColor' => '#000000',
                 'enabled' => false,
             ],
             [
@@ -71,6 +75,8 @@ function ea_default_data(): array
                 'title' => '',
                 'location' => '',
                 'description' => '',
+                'titleBold' => true,
+                'titleColor' => '#000000',
                 'enabled' => false,
             ],
         ],
@@ -90,6 +96,17 @@ function ea_clamp_opacity(mixed $value): int
     }
 
     return $opacity;
+}
+
+function ea_normalize_color(string $value): string
+{
+    $value = trim($value);
+
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1) {
+        return strtolower($value);
+    }
+
+    return '#000000';
 }
 
 function ea_normalize_data(array $data): array
@@ -115,6 +132,8 @@ function ea_normalize_data(array $data): array
             'title' => trim((string)($event['title'] ?? '')),
             'location' => trim((string)($event['location'] ?? '')),
             'description' => trim((string)($event['description'] ?? '')),
+            'titleBold' => !array_key_exists('titleBold', $event) || !empty($event['titleBold']),
+            'titleColor' => ea_normalize_color((string)($event['titleColor'] ?? '#000000')),
             'enabled' => !empty($event['enabled']),
         ];
     }
@@ -137,6 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'title' => trim((string)($_POST['title'][$i] ?? '')),
             'location' => trim((string)($_POST['location'][$i] ?? '')),
             'description' => trim((string)($_POST['description'][$i] ?? '')),
+            'titleBold' => isset($_POST['titleBold'][$i]),
+            'titleColor' => ea_normalize_color((string)($_POST['titleColor'][$i] ?? '#000000')),
             'enabled' => isset($_POST['enabled'][$i]),
         ];
     }
@@ -259,6 +280,7 @@ input[type=text],
 input[type=date],
 input[type=time],
 input[type=number],
+input[type=color],
 textarea{
     width:100%;
     padding:9px 10px;
@@ -366,6 +388,17 @@ textarea{
                     <div class="field">
                         <label>Titel</label>
                         <input type="text" name="title[<?= $i ?>]" value="<?= ea_h((string)$event['title']) ?>">
+                    </div>
+                    <div class="field">
+                        <label>Titel fett</label>
+                        <label>
+                            <input type="checkbox" name="titleBold[<?= $i ?>]" value="1" <?= !empty($event['titleBold']) ? 'checked' : '' ?>>
+                            Titel fett anzeigen
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label>Titel-Schriftfarbe</label>
+                        <input type="color" name="titleColor[<?= $i ?>]" value="<?= ea_h((string)$event['titleColor']) ?>">
                     </div>
                     <div class="field">
                         <label>Ort</label>

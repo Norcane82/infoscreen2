@@ -76,6 +76,17 @@ function es_clamp_opacity(mixed $value): int
     return $opacity;
 }
 
+function es_normalize_color(string $value): string
+{
+    $value = trim($value);
+
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1) {
+        return strtolower($value);
+    }
+
+    return '#000000';
+}
+
 $data = es_read_json($eventsFile, [
     'title' => 'Aktuelle Veranstaltungen',
     'maxItems' => 3,
@@ -303,6 +314,8 @@ h1{
                     $date = trim((string)($event['date'] ?? ''));
                     $time = trim((string)($event['time'] ?? ''));
                     $eventTitle = trim((string)($event['title'] ?? ''));
+                    $eventTitleBold = !array_key_exists('titleBold', $event) || !empty($event['titleBold']);
+                    $eventTitleColor = es_normalize_color((string)($event['titleColor'] ?? '#000000'));
                     $location = trim((string)($event['location'] ?? ''));
                     $description = trim((string)($event['description'] ?? ''));
                 ?>
@@ -311,7 +324,7 @@ h1{
                     <?php if ($time !== ''): ?>
                         <div class="eventTime"><?= es_h($time) ?></div>
                     <?php endif; ?>
-                    <div class="eventTitle"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div>
+                    <div class="eventTitle" style="color:<?= es_h($eventTitleColor) ?>;font-weight:<?= $eventTitleBold ? '900' : '500' ?>"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div>
                     <?php if ($location !== ''): ?>
                         <div class="eventLocation"><?= es_h($location) ?></div>
                     <?php endif; ?>
@@ -324,7 +337,7 @@ h1{
     </section>
 
     <footer class="footer">
-        <div>Es werden maximal <?= (int)$maxItems ?> aktuelle Veranstaltungen angezeigt. · Deckkraft: <?= (int)$panelOpacityPercent ?>%</div>
+        <div></div>
         <div>Stand: <?= es_h(date('d.m.Y H:i')) ?></div>
     </footer>
 </main>
