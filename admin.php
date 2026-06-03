@@ -343,6 +343,21 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
 
 <?php if ($page === 'upload'): ?>
     <div class="card">
+        <div class="cardHeader">
+            <div>
+                <h2>Zusätzliche Inhalte verwalten</h2>
+                <p class="small">Veranstaltungen und Sprüche werden zentral gepflegt und können als eigene Folien verwendet werden.</p>
+            </div>
+        </div>
+        <div class="topLinks">
+            <a class="btn secondary" href="events_admin.php">Aktuelle Veranstaltungen verwalten</a>
+            <a class="btn secondary" href="quotes_admin.php">Sprüche verwalten</a>
+            <a class="btn secondary" href="events_slide.php" target="_blank">Veranstaltungsfolie öffnen</a>
+            <a class="btn secondary" href="weather_quote.php" target="_blank">Wetter & Spruch öffnen</a>
+        </div>
+    </div>
+
+    <div class="card">
         <form action="upload.php" method="post" enctype="multipart/form-data">
             <h2>Neue Datei hochladen</h2>
             <div class="grid">
