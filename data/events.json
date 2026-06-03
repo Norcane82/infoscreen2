@@ -1,0 +1,30 @@
+{
+  "title": "Aktuelle Veranstaltungen",
+  "maxItems": 3,
+  "events": [
+    {
+      "date": "",
+      "time": "",
+      "title": "",
+      "location": "",
+      "description": "",
+      "enabled": false
+    },
+    {
+      "date": "",
+      "time": "",
+      "title": "",
+      "location": "",
+      "description": "",
+      "enabled": false
+    },
+    {
+      "date": "",
+      "time": "",
+      "title": "",
+      "location": "",
+      "description": "",
+      "enabled": false
+    }
+  ]
+}
