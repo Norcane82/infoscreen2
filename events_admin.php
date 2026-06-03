@@ -201,6 +201,7 @@ $data = ea_normalize_data(ea_read_json($eventsFile, ea_default_data()));
     --primary:#2563eb;
     --button:#e9edf2;
     --button-hover:#dfe5ec;
+    --warn:#b45309;
 }
 *{
     box-sizing:border-box;
@@ -289,9 +290,14 @@ textarea{
     background:#fff;
     font:inherit;
 }
+input[type=color]{
+    height:40px;
+    padding:4px;
+}
 textarea{
-    min-height:90px;
+    min-height:140px;
     resize:vertical;
+    line-height:1.45;
 }
 .notice{
     padding:10px 12px;
@@ -321,6 +327,24 @@ textarea{
     border:1px solid #93c5fd;
     background:rgba(59,130,246,.85);
     margin-top:8px;
+}
+.textareaHeader{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    align-items:center;
+    margin-bottom:6px;
+}
+.charCounter{
+    color:var(--muted);
+    font-weight:700;
+    white-space:nowrap;
+}
+.charCounter.is-warn{
+    color:var(--warn);
+}
+.charCounter.is-over{
+    color:#b91c1c;
 }
 </style>
 </head>
@@ -373,7 +397,7 @@ textarea{
                     <div class="field">
                         <label>Aktiv</label>
                         <label>
-                            <input type="checkbox" name="enabled[<?= $i ?>]" value="1" <?= !empty($event['enabled']) ? 'checked' : '' ?>>
+                            <input type="checkbox" name="enabled[<?= $i ?>]" value="1" data-event-enabled <?= !empty($event['enabled']) ? 'checked' : '' ?>>
                             anzeigen
                         </label>
                     </div>
@@ -407,8 +431,12 @@ textarea{
                 </div>
 
                 <div class="field" style="margin-top:14px">
-                    <label>Beschreibung</label>
-                    <textarea name="description[<?= $i ?>]"><?= ea_h((string)$event['description']) ?></textarea>
+                    <div class="textareaHeader">
+                        <label>Beschreibung</label>
+                        <span class="charCounter" data-counter-for="description-<?= $i ?>">0 / 3000</span>
+                    </div>
+                    <textarea id="description-<?= $i ?>" name="description[<?= $i ?>]" data-description><?= ea_h((string)$event['description']) ?></textarea>
+                    <p class="small">Zeichenlimit richtet sich nach aktiven Veranstaltungen: 1 aktiv = 3000, 2 aktiv = 2000, 3 aktiv = 1000 Zeichen je Beschreibung.</p>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -418,5 +446,49 @@ textarea{
         </div>
     </form>
 </div>
+
+<script>
+function getDescriptionLimit(){
+    const activeCount = Array.from(document.querySelectorAll('[data-event-enabled]')).filter((box) => box.checked).length;
+
+    if (activeCount <= 1) {
+        return 3000;
+    }
+
+    if (activeCount === 2) {
+        return 2000;
+    }
+
+    return 1000;
+}
+
+function updateCounters(){
+    const limit = getDescriptionLimit();
+
+    document.querySelectorAll('[data-description]').forEach((textarea) => {
+        textarea.maxLength = limit;
+
+        const counter = document.querySelector('[data-counter-for="' + textarea.id + '"]');
+        if (!counter) {
+            return;
+        }
+
+        const length = textarea.value.length;
+        counter.textContent = length + ' / ' + limit;
+        counter.classList.toggle('is-warn', length > limit * 0.85 && length <= limit);
+        counter.classList.toggle('is-over', length > limit);
+    });
+}
+
+document.querySelectorAll('[data-event-enabled]').forEach((box) => {
+    box.addEventListener('change', updateCounters);
+});
+
+document.querySelectorAll('[data-description]').forEach((textarea) => {
+    textarea.addEventListener('input', updateCounters);
+});
+
+updateCounters();
+</script>
 </body>
 </html>

@@ -136,6 +136,7 @@ usort($filtered, static function (array $a, array $b): int {
 });
 
 $visibleEvents = array_slice($filtered, 0, $maxItems);
+$activeCount = count($visibleEvents);
 $logoUrl = es_logo_url($config);
 ?>
 <!doctype html>
@@ -172,10 +173,10 @@ body{
 }
 .slide{
     min-height:100vh;
-    padding:clamp(34px,4.5vw,72px);
+    padding:clamp(30px,3.5vw,58px);
     display:grid;
     grid-template-rows:auto 1fr auto;
-    gap:clamp(24px,3vw,46px);
+    gap:clamp(18px,2vw,30px);
 }
 .header{
     display:flex;
@@ -186,7 +187,7 @@ body{
 h1{
     margin:0;
     color:var(--text);
-    font-size:clamp(44px,5.3vw,96px);
+    font-size:clamp(44px,5.3vw,92px);
     line-height:1;
 }
 .logoBox{
@@ -203,51 +204,92 @@ h1{
 }
 .events{
     display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:clamp(18px,2vw,32px);
-    align-items:stretch;
+    grid-template-columns:1fr;
+    gap:clamp(14px,1.6vw,24px);
+    align-content:stretch;
+}
+.events.count-1{
+    grid-template-rows:1fr;
+}
+.events.count-2{
+    grid-template-rows:repeat(2,1fr);
+}
+.events.count-3{
+    grid-template-rows:repeat(3,1fr);
 }
 .eventCard{
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:32px;
-    padding:clamp(24px,3vw,44px);
+    border-radius:28px;
+    padding:clamp(18px,2vw,34px);
     box-shadow:0 18px 44px rgba(15,23,42,.14);
-    min-height:48vh;
-    display:flex;
-    flex-direction:column;
+    display:grid;
+    grid-template-columns:minmax(210px,.34fr) minmax(0,1fr);
+    gap:clamp(18px,2.4vw,42px);
+    align-items:start;
+    min-height:0;
+    overflow:hidden;
+}
+.eventMeta{
+    border-right:1px solid rgba(0,0,0,.16);
+    padding-right:clamp(14px,2vw,30px);
 }
 .eventDate{
     color:var(--accent2);
-    font-size:clamp(24px,2.3vw,44px);
-    line-height:1.1;
+    font-size:clamp(26px,2.8vw,52px);
+    line-height:1.05;
     font-weight:900;
     margin-bottom:8px;
 }
 .eventTime{
     color:var(--accent);
-    font-size:clamp(18px,1.5vw,28px);
-    font-weight:800;
-    margin-bottom:clamp(18px,2vw,30px);
-}
-.eventTitle{
-    color:var(--text);
-    font-size:clamp(30px,3.3vw,62px);
-    line-height:1.08;
+    font-size:clamp(19px,1.8vw,32px);
     font-weight:900;
-    margin-bottom:clamp(16px,2vw,28px);
+    margin-bottom:clamp(14px,1.6vw,24px);
 }
 .eventLocation{
     color:var(--muted);
-    font-size:clamp(18px,1.5vw,28px);
-    font-weight:700;
-    margin-bottom:18px;
+    font-size:clamp(18px,1.45vw,28px);
+    font-weight:800;
+    line-height:1.25;
+}
+.eventContent{
+    min-width:0;
+    overflow:hidden;
+}
+.eventTitle{
+    color:var(--text);
+    font-size:clamp(28px,3.2vw,58px);
+    line-height:1.08;
+    font-weight:900;
+    margin-bottom:clamp(12px,1.5vw,22px);
 }
 .eventDescription{
     color:var(--text);
-    font-size:clamp(18px,1.45vw,28px);
-    line-height:1.35;
-    margin-top:auto;
+    font-size:clamp(17px,1.35vw,25px);
+    line-height:1.32;
+    overflow:hidden;
+}
+.events.count-1 .eventDescription{
+    font-size:clamp(20px,1.55vw,30px);
+    line-height:1.36;
+}
+.events.count-2 .eventTitle{
+    font-size:clamp(26px,2.6vw,48px);
+}
+.events.count-2 .eventDescription{
+    font-size:clamp(16px,1.22vw,23px);
+}
+.events.count-3 .eventCard{
+    padding:clamp(14px,1.5vw,26px);
+}
+.events.count-3 .eventTitle{
+    font-size:clamp(22px,2.1vw,38px);
+    margin-bottom:10px;
+}
+.events.count-3 .eventDescription{
+    font-size:clamp(14px,1.08vw,20px);
+    line-height:1.24;
 }
 .empty{
     grid-column:1/-1;
@@ -280,11 +322,14 @@ h1{
     .footer{
         flex-direction:column;
     }
-    .events{
+    .eventCard{
         grid-template-columns:1fr;
     }
-    .eventCard{
-        min-height:auto;
+    .eventMeta{
+        border-right:0;
+        border-bottom:1px solid rgba(0,0,0,.16);
+        padding-right:0;
+        padding-bottom:14px;
     }
     .logoBox{
         justify-content:flex-start;
@@ -305,7 +350,7 @@ h1{
         <?php endif; ?>
     </header>
 
-    <section class="events">
+    <section class="events count-<?= (int)$activeCount ?>">
         <?php if (!$visibleEvents): ?>
             <div class="empty">Derzeit sind keine aktuellen Veranstaltungen eingetragen.</div>
         <?php else: ?>
@@ -320,17 +365,22 @@ h1{
                     $description = trim((string)($event['description'] ?? ''));
                 ?>
                 <article class="eventCard">
-                    <div class="eventDate"><?= es_h(es_date_label($date)) ?></div>
-                    <?php if ($time !== ''): ?>
-                        <div class="eventTime"><?= es_h($time) ?></div>
-                    <?php endif; ?>
-                    <div class="eventTitle" style="color:<?= es_h($eventTitleColor) ?>;font-weight:<?= $eventTitleBold ? '900' : '500' ?>"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div>
-                    <?php if ($location !== ''): ?>
-                        <div class="eventLocation"><?= es_h($location) ?></div>
-                    <?php endif; ?>
-                    <?php if ($description !== ''): ?>
-                        <div class="eventDescription"><?= nl2br(es_h($description)) ?></div>
-                    <?php endif; ?>
+                    <div class="eventMeta">
+                        <div class="eventDate"><?= es_h(es_date_label($date)) ?></div>
+                        <?php if ($time !== ''): ?>
+                            <div class="eventTime"><?= es_h($time) ?></div>
+                        <?php endif; ?>
+                        <?php if ($location !== ''): ?>
+                            <div class="eventLocation"><?= es_h($location) ?></div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="eventContent">
+                        <div class="eventTitle" style="color:<?= es_h($eventTitleColor) ?>;font-weight:<?= $eventTitleBold ? '900' : '500' ?>"><?= es_h($eventTitle !== '' ? $eventTitle : 'Veranstaltung') ?></div>
+                        <?php if ($description !== ''): ?>
+                            <div class="eventDescription"><?= nl2br(es_h($description)) ?></div>
+                        <?php endif; ?>
+                    </div>
                 </article>
             <?php endforeach; ?>
         <?php endif; ?>
