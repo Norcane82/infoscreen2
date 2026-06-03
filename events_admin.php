@@ -461,7 +461,7 @@ textarea{
                         <span class="charCounter" data-counter-for="description-<?= $i ?>">0 / 3000</span>
                     </div>
                     <textarea id="description-<?= $i ?>" name="description[<?= $i ?>]" data-description><?= ea_h((string)$event['description']) ?></textarea>
-                    <p class="small">Das Gesamtbudget wird durch die aktiven Veranstaltungen geteilt. Beispiel bei 3000 Zeichen: 1 aktiv = 3000, 2 aktiv = 1500, 3 aktiv = 1000 Zeichen je Beschreibung.</p>
+                    <p class="small">Das Gesamtbudget wird durch die aktiven Veranstaltungen geteilt. Sobald das Limit erreicht ist, kann nicht weitergeschrieben werden.</p>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -489,6 +489,10 @@ function updateCounters(){
     document.querySelectorAll('[data-description]').forEach((textarea) => {
         textarea.maxLength = limit;
 
+        if (textarea.value.length > limit) {
+            textarea.value = textarea.value.slice(0, limit);
+        }
+
         const counter = document.querySelector('[data-counter-for="' + textarea.id + '"]');
         if (!counter) {
             return;
@@ -496,8 +500,8 @@ function updateCounters(){
 
         const length = textarea.value.length;
         counter.textContent = length + ' / ' + limit;
-        counter.classList.toggle('is-warn', length > limit * 0.85 && length <= limit);
-        counter.classList.toggle('is-over', length > limit);
+        counter.classList.toggle('is-warn', length > limit * 0.85 && length < limit);
+        counter.classList.toggle('is-over', length >= limit);
     });
 }
 
