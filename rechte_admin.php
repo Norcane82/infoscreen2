@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
+auth_start();
+
 $message = '';
 $error = '';
 
@@ -40,6 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Die Zugriffseinstellungen konnten nicht gespeichert werden.';
         }
     } else {
+        $oldRequiresPin = !empty($config['editorAccess']['requiresPin']);
+        $oldPinHash = trim((string)($config['editorAccess']['pinHash'] ?? ''));
+
         $requiresPin = isset($_POST['editorRequiresPin']);
         $newEditorPin = trim((string)($_POST['newEditorPin'] ?? ''));
         $newEditorPin2 = trim((string)($_POST['newEditorPin2'] ?? ''));
@@ -81,8 +86,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($error === '') {
+            $pinChanged =
+                $oldRequiresPin !== !empty($config['editorAccess']['requiresPin']) ||
+                $oldPinHash !== trim((string)($config['editorAccess']['pinHash'] ?? ''));
+
             if (auth_write_config($config)) {
-                $message = 'Zugriffseinstellungen wurden gespeichert.';
+                if ($pinChanged) {
+                    unset($_SESSION['infoscreen2_editor_ok']);
+                    $message = 'Zugriffseinstellungen wurden gespeichert. Die Inhalts-Sitzung wurde zurückgesetzt.';
+                } else {
+                    $message = 'Zugriffseinstellungen wurden gespeichert.';
+                }
             } else {
                 $error = 'Die Zugriffseinstellungen konnten nicht gespeichert werden.';
             }
@@ -131,6 +145,7 @@ input[type=checkbox]{width:auto}
         <a class="btn" href="admin.php?page=master">Zur Master-Verwaltung</a>
         <?php if (!$isInitialSetup): ?>
             <a class="btn" href="logout.php?mode=admin">Adminmodus verlassen</a>
+            <a class="btn" href="logout.php">Infoscreen abmelden</a>
         <?php endif; ?>
     </div>
 
