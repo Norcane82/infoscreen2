@@ -4,7 +4,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/bootstrap.php';
 
 $config = load_config();
-
 $eventsFile = __DIR__ . '/data/events.json';
 
 function es_h(string $value): string
@@ -39,11 +38,7 @@ function es_logo_url(array $config): string
 function es_date_label(string $date): string
 {
     $ts = strtotime($date);
-    if (!$ts) {
-        return $date;
-    }
-
-    return date('d.m.Y', $ts);
+    return $ts ? date('d.m.Y', $ts) : $date;
 }
 
 function es_is_future_or_today(array $event): bool
@@ -54,37 +49,25 @@ function es_is_future_or_today(array $event): bool
     }
 
     $eventTs = strtotime($date . ' 23:59:59');
-    if (!$eventTs) {
-        return true;
-    }
-
-    return $eventTs >= strtotime('today 00:00:00');
+    return !$eventTs || $eventTs >= strtotime('today 00:00:00');
 }
 
 function es_clamp_opacity(mixed $value): int
 {
     $opacity = (int)$value;
-
     if ($opacity < 0) {
         return 0;
     }
-
     if ($opacity > 100) {
         return 100;
     }
-
     return $opacity;
 }
 
 function es_normalize_color(string $value): string
 {
     $value = trim($value);
-
-    if (preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1) {
-        return strtolower($value);
-    }
-
-    return '#000000';
+    return preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1 ? strtolower($value) : '#000000';
 }
 
 $data = es_read_json($eventsFile, [
@@ -111,15 +94,7 @@ $events = is_array($data['events'] ?? null) ? $data['events'] : [];
 $filtered = [];
 
 foreach ($events as $event) {
-    if (!is_array($event)) {
-        continue;
-    }
-
-    if (empty($event['enabled'])) {
-        continue;
-    }
-
-    if (!es_is_future_or_today($event)) {
+    if (!is_array($event) || empty($event['enabled']) || !es_is_future_or_today($event)) {
         continue;
     }
 
@@ -131,7 +106,6 @@ usort($filtered, static function (array $a, array $b): int {
     $dateB = trim((string)($b['date'] ?? '9999-12-31'));
     $timeA = trim((string)($a['time'] ?? '23:59'));
     $timeB = trim((string)($b['time'] ?? '23:59'));
-
     return strcmp($dateA . ' ' . $timeA, $dateB . ' ' . $timeB);
 });
 
@@ -156,27 +130,32 @@ $logoUrl = es_logo_url($config);
     --accent:#000000;
     --accent2:#0f172a;
 }
-*{
-    box-sizing:border-box;
-}
-html,
-body{
-    width:100%;
-    height:100%;
-    margin:0;
-}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0}
 body{
     font-family:Arial,Helvetica,sans-serif;
     background:var(--bg);
     color:var(--text);
     overflow:hidden;
 }
+.scaleViewport{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    background:var(--bg);
+}
 .slide{
-    min-height:100vh;
-    padding:clamp(30px,3.5vw,58px);
+    position:absolute;
+    top:0;
+    left:0;
+    width:1920px;
+    height:1080px;
+    padding:42px;
     display:grid;
-    grid-template-rows:auto 1fr auto;
-    gap:clamp(18px,2vw,30px);
+    grid-template-rows:120px 1fr 36px;
+    gap:22px;
+    transform-origin:top left;
+    background:var(--bg);
 }
 .header{
     display:flex;
@@ -187,70 +166,68 @@ body{
 h1{
     margin:0;
     color:var(--text);
-    font-size:clamp(44px,5.3vw,92px);
+    font-size:72px;
     line-height:1;
+    letter-spacing:-1.5px;
 }
 .logoBox{
     display:flex;
     justify-content:flex-end;
     align-items:flex-start;
-    min-width:180px;
+    min-width:220px;
+    padding-top:4px;
 }
 .logoBox img{
-    max-width:clamp(120px,12vw,240px);
-    max-height:clamp(70px,8vw,150px);
+    max-width:220px;
+    max-height:82px;
     object-fit:contain;
     filter:drop-shadow(0 10px 18px rgba(0,0,0,.18));
 }
 .events{
     display:grid;
     grid-template-columns:1fr;
-    gap:clamp(14px,1.6vw,24px);
-    align-content:stretch;
+    gap:18px;
+    min-height:0;
 }
-.events.count-1{
-    grid-template-rows:1fr;
-}
-.events.count-2{
-    grid-template-rows:repeat(2,1fr);
-}
-.events.count-3{
-    grid-template-rows:repeat(3,1fr);
-}
+.events.count-0,
+.events.count-1{grid-template-rows:1fr}
+.events.count-2{grid-template-rows:repeat(2,1fr)}
+.events.count-3{grid-template-rows:repeat(3,1fr)}
 .eventCard{
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:28px;
-    padding:clamp(18px,2vw,34px);
-    box-shadow:0 18px 44px rgba(15,23,42,.14);
+    border-radius:24px;
+    padding:28px;
+    box-shadow:0 18px 44px rgba(15,23,42,.12);
     display:grid;
-    grid-template-columns:minmax(210px,.34fr) minmax(0,1fr);
-    gap:clamp(18px,2.4vw,42px);
+    grid-template-columns:420px minmax(0,1fr);
+    gap:36px;
     align-items:start;
     min-height:0;
     overflow:hidden;
 }
 .eventMeta{
     border-right:1px solid rgba(0,0,0,.16);
-    padding-right:clamp(14px,2vw,30px);
+    padding-right:34px;
+    min-height:0;
 }
 .eventDate{
     color:var(--accent2);
-    font-size:clamp(26px,2.8vw,52px);
+    font-size:44px;
     line-height:1.05;
     font-weight:900;
     margin-bottom:8px;
 }
 .eventTime{
     color:var(--accent);
-    font-size:clamp(19px,1.8vw,32px);
+    font-size:28px;
     font-weight:900;
-    margin-bottom:clamp(14px,1.6vw,24px);
+    margin-bottom:22px;
 }
 .eventLocation{
     color:var(--muted);
-    font-size:clamp(18px,1.45vw,28px);
-    font-weight:800;
+    font-size:24px;
+    font-weight:900;
     line-height:1.25;
 }
 .eventContent{
@@ -259,86 +236,62 @@ h1{
 }
 .eventTitle{
     color:var(--text);
-    font-size:clamp(28px,3.2vw,58px);
+    font-size:50px;
     line-height:1.08;
     font-weight:900;
-    margin-bottom:clamp(12px,1.5vw,22px);
+    margin-bottom:18px;
 }
 .eventDescription{
     color:var(--text);
-    font-size:clamp(17px,1.35vw,25px);
+    font-size:26px;
     line-height:1.32;
     overflow:hidden;
 }
-.events.count-1 .eventDescription{
-    font-size:clamp(20px,1.55vw,30px);
-    line-height:1.36;
+.events.count-2 .eventCard{
+    padding:24px;
+    grid-template-columns:370px minmax(0,1fr);
 }
-.events.count-2 .eventTitle{
-    font-size:clamp(26px,2.6vw,48px);
-}
-.events.count-2 .eventDescription{
-    font-size:clamp(16px,1.22vw,23px);
-}
+.events.count-2 .eventDate{font-size:38px}
+.events.count-2 .eventTitle{font-size:42px;margin-bottom:14px}
+.events.count-2 .eventDescription{font-size:22px;line-height:1.27}
+.events.count-3{gap:14px}
 .events.count-3 .eventCard{
-    padding:clamp(14px,1.5vw,26px);
+    padding:18px 22px;
+    grid-template-columns:320px minmax(0,1fr);
 }
-.events.count-3 .eventTitle{
-    font-size:clamp(22px,2.1vw,38px);
-    margin-bottom:10px;
-}
-.events.count-3 .eventDescription{
-    font-size:clamp(14px,1.08vw,20px);
-    line-height:1.24;
-}
+.events.count-3 .eventDate{font-size:32px}
+.events.count-3 .eventTime{font-size:22px;margin-bottom:12px}
+.events.count-3 .eventLocation{font-size:20px}
+.events.count-3 .eventTitle{font-size:34px;margin-bottom:8px}
+.events.count-3 .eventDescription{font-size:18px;line-height:1.21}
 .empty{
     grid-column:1/-1;
     background:var(--card);
     border:1px solid var(--line);
-    border-radius:32px;
-    min-height:48vh;
+    border-radius:28px;
     display:flex;
     align-items:center;
     justify-content:center;
     text-align:center;
     padding:48px;
     color:var(--text);
-    font-size:clamp(30px,3vw,56px);
-    font-weight:800;
+    font-size:46px;
+    font-weight:900;
     box-shadow:0 18px 44px rgba(15,23,42,.14);
 }
 .footer{
     color:var(--muted);
-    font-size:clamp(13px,1vw,18px);
+    font-size:17px;
     display:flex;
     justify-content:space-between;
     gap:24px;
-}
-@media (max-width:1000px){
-    body{
-        overflow:auto;
-    }
-    .header,
-    .footer{
-        flex-direction:column;
-    }
-    .eventCard{
-        grid-template-columns:1fr;
-    }
-    .eventMeta{
-        border-right:0;
-        border-bottom:1px solid rgba(0,0,0,.16);
-        padding-right:0;
-        padding-bottom:14px;
-    }
-    .logoBox{
-        justify-content:flex-start;
-    }
+    align-items:end;
 }
 </style>
 </head>
 <body>
-<main class="slide">
+<div class="scaleViewport">
+<main class="slide" id="eventSlide">
     <header class="header">
         <div>
             <h1><?= es_h($title) ?></h1>
@@ -391,5 +344,29 @@ h1{
         <div>Stand: <?= es_h(date('d.m.Y H:i')) ?></div>
     </footer>
 </main>
+</div>
+
+<script>
+function fitEventSlide(){
+    const slide = document.getElementById('eventSlide');
+    if (!slide) return;
+
+    const designWidth = 1920;
+    const designHeight = 1080;
+    const scale = Math.min(window.innerWidth / designWidth, window.innerHeight / designHeight);
+
+    slide.style.transform = 'scale(' + scale + ')';
+
+    const visualWidth = designWidth * scale;
+    const visualHeight = designHeight * scale;
+
+    slide.style.left = Math.max(0, (window.innerWidth - visualWidth) / 2) + 'px';
+    slide.style.top = Math.max(0, (window.innerHeight - visualHeight) / 2) + 'px';
+}
+
+window.addEventListener('resize', fitEventSlide);
+window.addEventListener('load', fitEventSlide);
+fitEventSlide();
+</script>
 </body>
 </html>
