@@ -197,38 +197,49 @@ h1{
     background:var(--card);
     border:1px solid var(--line);
     border-radius:24px;
-    padding:28px;
+    padding:28px 34px;
     box-shadow:0 18px 44px rgba(15,23,42,.12);
-    display:grid;
-    grid-template-columns:420px minmax(0,1fr);
-    gap:36px;
-    align-items:start;
+    display:flex;
+    flex-direction:column;
     min-height:0;
     overflow:hidden;
 }
 .eventMeta{
-    border-right:1px solid rgba(0,0,0,.16);
-    padding-right:34px;
-    min-height:0;
+    display:flex;
+    align-items:flex-start;
+    gap:30px;
+    padding-bottom:18px;
+    margin-bottom:18px;
+    border-bottom:1px solid rgba(0,0,0,.16);
+}
+.eventMetaItem{
+    min-width:0;
+}
+.eventMetaItem.date{
+    min-width:250px;
+}
+.eventMetaItem.time{
+    min-width:230px;
 }
 .eventDate{
     color:var(--accent2);
     font-size:44px;
     line-height:1.05;
     font-weight:900;
-    margin-bottom:8px;
 }
 .eventTime{
     color:var(--accent);
-    font-size:28px;
+    font-size:32px;
+    line-height:1.12;
     font-weight:900;
-    margin-bottom:22px;
+    padding-top:6px;
 }
 .eventLocation{
     color:var(--muted);
-    font-size:24px;
+    font-size:30px;
     font-weight:900;
-    line-height:1.25;
+    line-height:1.18;
+    padding-top:6px;
 }
 .eventContent{
     min-width:0;
@@ -247,21 +258,44 @@ h1{
     line-height:1.32;
     overflow:hidden;
 }
+.events.count-1 .eventTitle{
+    font-size:54px;
+}
+.events.count-1 .eventDescription{
+    font-size:28px;
+    line-height:1.34;
+}
 .events.count-2 .eventCard{
-    padding:24px;
-    grid-template-columns:370px minmax(0,1fr);
+    padding:24px 30px;
+}
+.events.count-2 .eventMeta{
+    gap:24px;
+    padding-bottom:14px;
+    margin-bottom:14px;
 }
 .events.count-2 .eventDate{font-size:38px}
-.events.count-2 .eventTitle{font-size:42px;margin-bottom:14px}
+.events.count-2 .eventTime{font-size:28px}
+.events.count-2 .eventLocation{font-size:26px}
+.events.count-2 .eventTitle{font-size:42px;margin-bottom:12px}
 .events.count-2 .eventDescription{font-size:22px;line-height:1.27}
 .events.count-3{gap:14px}
 .events.count-3 .eventCard{
-    padding:18px 22px;
-    grid-template-columns:320px minmax(0,1fr);
+    padding:17px 24px;
 }
-.events.count-3 .eventDate{font-size:32px}
-.events.count-3 .eventTime{font-size:22px;margin-bottom:12px}
-.events.count-3 .eventLocation{font-size:20px}
+.events.count-3 .eventMeta{
+    gap:20px;
+    padding-bottom:10px;
+    margin-bottom:10px;
+}
+.events.count-3 .eventMetaItem.date{
+    min-width:190px;
+}
+.events.count-3 .eventMetaItem.time{
+    min-width:170px;
+}
+.events.count-3 .eventDate{font-size:31px}
+.events.count-3 .eventTime{font-size:22px;padding-top:4px}
+.events.count-3 .eventLocation{font-size:21px;padding-top:4px}
 .events.count-3 .eventTitle{font-size:34px;margin-bottom:8px}
 .events.count-3 .eventDescription{font-size:18px;line-height:1.21}
 .empty{
@@ -319,12 +353,20 @@ h1{
                 ?>
                 <article class="eventCard">
                     <div class="eventMeta">
-                        <div class="eventDate"><?= es_h(es_date_label($date)) ?></div>
+                        <div class="eventMetaItem date">
+                            <div class="eventDate"><?= es_h(es_date_label($date)) ?></div>
+                        </div>
+
                         <?php if ($time !== ''): ?>
-                            <div class="eventTime"><?= es_h($time) ?></div>
+                            <div class="eventMetaItem time">
+                                <div class="eventTime"><?= es_h($time) ?></div>
+                            </div>
                         <?php endif; ?>
+
                         <?php if ($location !== ''): ?>
-                            <div class="eventLocation"><?= es_h($location) ?></div>
+                            <div class="eventMetaItem location">
+                                <div class="eventLocation"><?= es_h($location) ?></div>
+                            </div>
                         <?php endif; ?>
                     </div>
 
