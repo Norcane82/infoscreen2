@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $config = auth_read_config();
+$editorPinActive = !empty($config['editorAccess']['requiresPin']);
 
 function ra_h(string $value): string
 {
@@ -145,7 +146,9 @@ input[type=checkbox]{width:auto}
         <a class="btn" href="admin.php?page=master">Zur Master-Verwaltung</a>
         <?php if (!$isInitialSetup): ?>
             <a class="btn" href="logout.php?mode=admin">Adminmodus verlassen</a>
-            <a class="btn" href="logout.php">Infoscreen abmelden</a>
+            <?php if ($editorPinActive): ?>
+                <a class="btn" href="logout.php">Infoscreen abmelden</a>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 

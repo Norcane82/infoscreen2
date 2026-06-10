@@ -8,6 +8,7 @@ require_once __DIR__ . '/inc/playlist.php';
 auth_require_editor();
 $isAdmin = auth_is_admin();
 $authRole = auth_current_role();
+$editorPinActive = auth_editor_requires_pin();
 
 $config = load_config();
 $playlistData = playlist_load_normalized();
@@ -97,13 +98,17 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
             <div class="topLinks" style="margin-top:8px">
                 <a class="btn secondary" href="rechte_admin.php">Rechteverwaltung</a>
                 <a class="btn secondary" href="logout.php?mode=admin">Adminmodus verlassen</a>
-                <a class="btn secondary" href="logout.php">Infoscreen abmelden</a>
+                <?php if ($editorPinActive): ?>
+                    <a class="btn secondary" href="logout.php">Infoscreen abmelden</a>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <strong>Inhaltsmodus</strong>
             <div class="topLinks" style="margin-top:8px">
                 <a class="btn secondary" href="admin_login.php">Admin anmelden</a>
-                <a class="btn secondary" href="logout.php">Infoscreen abmelden</a>
+                <?php if ($editorPinActive): ?>
+                    <a class="btn secondary" href="logout.php">Infoscreen abmelden</a>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
