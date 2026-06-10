@@ -2,7 +2,12 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/inc/playlist.php';
+
+auth_require_editor();
+$isAdmin = auth_is_admin();
+$authRole = auth_current_role();
 
 $config = load_config();
 $playlistData = playlist_load_normalized();
@@ -23,6 +28,9 @@ if (isset($_GET['cleanup'])) {
 }
 
 $allowedPages = ['master','status','settings','upload','playlist','actions','fallback','backups','critical'];
+if (!$isAdmin) {
+    $allowedPages = ['master','upload','playlist'];
+}
 $page = strtolower((string)($_GET['page'] ?? 'master'));
 if (!in_array($page, $allowedPages, true)) {
     $page = 'master';
@@ -81,18 +89,38 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
         </select>
         <p class="small">Multi-Player-Verwaltung ist vorbereitet, aber noch nicht aktiv.</p>
     </div>
+
+    <div class="systemSwitcher">
+        <label>Zugriff</label>
+        <?php if ($isAdmin): ?>
+            <strong>Adminmodus aktiv</strong>
+            <div class="topLinks" style="margin-top:8px">
+                <a class="btn secondary" href="rechte_admin.php">Rechteverwaltung</a>
+                <a class="btn secondary" href="logout.php?mode=admin">Adminmodus verlassen</a>
+            </div>
+        <?php else: ?>
+            <strong>Inhaltsmodus</strong>
+            <div class="topLinks" style="margin-top:8px">
+                <a class="btn secondary" href="admin_login.php">Admin anmelden</a>
+            </div>
+        <?php endif; ?>
+    </div>
 </header>
 
 <nav class="sectionNav" aria-label="Admin-Bereiche">
     <a class="sectionNav__item <?= isAdminPage($page, 'master') ?>" href="admin.php?page=master">Übersicht</a>
-    <a class="sectionNav__item <?= isAdminPage($page, 'status') ?>" href="admin.php?page=status">Status</a>
-    <a class="sectionNav__item <?= isAdminPage($page, 'settings') ?>" href="admin.php?page=settings">Allgemeine Einstellungen</a>
+    <?php if ($isAdmin): ?>
+        <a class="sectionNav__item <?= isAdminPage($page, 'status') ?>" href="admin.php?page=status">Status</a>
+        <a class="sectionNav__item <?= isAdminPage($page, 'settings') ?>" href="admin.php?page=settings">Allgemeine Einstellungen</a>
+    <?php endif; ?>
     <a class="sectionNav__item <?= isAdminPage($page, 'upload') ?>" href="admin.php?page=upload">Neue Datei hochladen</a>
     <a class="sectionNav__item <?= isAdminPage($page, 'playlist') ?>" href="admin.php?page=playlist">Playlist</a>
-    <a class="sectionNav__item <?= isAdminPage($page, 'actions') ?>" href="admin.php?page=actions">Direkte Aktionen</a>
-    <a class="sectionNav__item <?= isAdminPage($page, 'fallback') ?>" href="admin.php?page=fallback">Fallback</a>
-    <a class="sectionNav__item <?= isAdminPage($page, 'backups') ?>" href="admin.php?page=backups">Backups</a>
-    <a class="sectionNav__item sectionNav__item--danger <?= isAdminPage($page, 'critical') ?>" href="admin.php?page=critical">Kritische Aktionen</a>
+    <?php if ($isAdmin): ?>
+        <a class="sectionNav__item <?= isAdminPage($page, 'actions') ?>" href="admin.php?page=actions">Direkte Aktionen</a>
+        <a class="sectionNav__item <?= isAdminPage($page, 'fallback') ?>" href="admin.php?page=fallback">Fallback</a>
+        <a class="sectionNav__item <?= isAdminPage($page, 'backups') ?>" href="admin.php?page=backups">Backups</a>
+        <a class="sectionNav__item sectionNav__item--danger <?= isAdminPage($page, 'critical') ?>" href="admin.php?page=critical">Kritische Aktionen</a>
+    <?php endif; ?>
 </nav>
 
 <?php if ($cleanupMessage !== ''): ?>
@@ -109,14 +137,17 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
         </div>
 
         <div class="masterGrid">
-            <a class="masterTile" href="admin.php?page=status">
-                <span class="masterTile__title">Status</span>
-                <span class="masterTile__text">Live-Status, Snapshots, Logs und JSON.</span>
-            </a>
-            <a class="masterTile" href="admin.php?page=settings">
-                <span class="masterTile__title">Allgemeine Einstellungen</span>
-                <span class="masterTile__text">Standarddauer, Fade, Uhr und Watchdog-Werte.</span>
-            </a>
+            <?php if ($isAdmin): ?>
+                <a class="masterTile" href="admin.php?page=status">
+                    <span class="masterTile__title">Status</span>
+                    <span class="masterTile__text">Live-Status, Snapshots, Logs und JSON.</span>
+                </a>
+                <a class="masterTile" href="admin.php?page=settings">
+                    <span class="masterTile__title">Allgemeine Einstellungen</span>
+                    <span class="masterTile__text">Standarddauer, Fade, Uhr und Watchdog-Werte.</span>
+                </a>
+            <?php endif; ?>
+
             <a class="masterTile" href="admin.php?page=upload">
                 <span class="masterTile__title">Neue Datei hochladen</span>
                 <span class="masterTile__text">Medien, PDF oder Webseite hinzufügen. Playlist direkt darunter.</span>
@@ -125,22 +156,38 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
                 <span class="masterTile__title">Playlist</span>
                 <span class="masterTile__text">Folien verwalten, sortieren, aktivieren und bearbeiten.</span>
             </a>
-            <a class="masterTile" href="admin.php?page=actions">
-                <span class="masterTile__title">Direkte Aktionen</span>
-                <span class="masterTile__text">Player, Kiosk, Watchdog und Backup schnell ausführen.</span>
+            <a class="masterTile" href="events_admin.php">
+                <span class="masterTile__title">Aktuelle Veranstaltungen</span>
+                <span class="masterTile__text">Veranstaltungen für die Veranstaltungsfolie pflegen.</span>
             </a>
-            <a class="masterTile" href="admin.php?page=fallback">
-                <span class="masterTile__title">Fallback</span>
-                <span class="masterTile__text">Fallback prüfen, öffnen, aktivieren oder deaktivieren.</span>
+            <a class="masterTile" href="quotes_admin.php">
+                <span class="masterTile__title">Sprüche verwalten</span>
+                <span class="masterTile__text">Sprüche für die Wetter-und-Spruch-Folie bearbeiten.</span>
             </a>
-            <a class="masterTile" href="admin.php?page=backups">
-                <span class="masterTile__title">Backups</span>
-                <span class="masterTile__text">Backups öffnen oder neues Backup erstellen.</span>
-            </a>
-            <a class="masterTile masterTile--danger" href="admin.php?page=critical">
-                <span class="masterTile__title">Kritische Aktionen</span>
-                <span class="masterTile__text">System-Neustart und Datei-Aufräumen geschützt ausführen.</span>
-            </a>
+
+            <?php if ($isAdmin): ?>
+                <a class="masterTile" href="admin.php?page=actions">
+                    <span class="masterTile__title">Direkte Aktionen</span>
+                    <span class="masterTile__text">Player, Kiosk, Watchdog und Backup schnell ausführen.</span>
+                </a>
+                <a class="masterTile" href="admin.php?page=fallback">
+                    <span class="masterTile__title">Fallback</span>
+                    <span class="masterTile__text">Fallback prüfen, öffnen, aktivieren oder deaktivieren.</span>
+                </a>
+                <a class="masterTile" href="admin.php?page=backups">
+                    <span class="masterTile__title">Backups</span>
+                    <span class="masterTile__text">Backups öffnen oder neues Backup erstellen.</span>
+                </a>
+                <a class="masterTile" href="rechte_admin.php">
+                    <span class="masterTile__title">Rechteverwaltung</span>
+                    <span class="masterTile__text">Admin-Passwort, Pflege-PIN und späteres Benutzersystem verwalten.</span>
+                </a>
+                <a class="masterTile masterTile--danger" href="admin.php?page=critical">
+                    <span class="masterTile__title">Kritische Aktionen</span>
+                    <span class="masterTile__text">System-Neustart und Datei-Aufräumen geschützt ausführen.</span>
+                </a>
+            <?php endif; ?>
+        </div>
         </div>
     </div>
 
@@ -148,15 +195,27 @@ $adminCssVersion = is_file($adminCss) ? (int)filemtime($adminCss) : time();
         <h2>Schnellzugriff</h2>
         <div class="topLinks">
             <a class="btn" href="index.php" target="_blank">Player öffnen</a>
-            <a class="btn" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
-            <a class="btn" href="status.php" target="_blank">Status JSON</a>
-            <a class="btn" href="system_report.php">Systemauswertung</a>
-            <a class="btn" href="view_log.php">Logs anzeigen</a>
-            <a class="btn" href="backups.php">Backups</a>
-            <form action="watchdog_reset.php" method="post" style="display:inline">
-                <button class="secondary" type="submit">Watchdog zurücksetzen</button>
+            <form action="player_action.php" method="post" style="display:inline">
+                <input type="hidden" name="action" value="restart_player">
+                <button class="secondary restartGuard" type="submit" data-lock-seconds="30">Player neu starten</button>
             </form>
+            <a class="btn secondary" href="https://www.caritas-tirol.at/spenden-helfen/spendenmoeglichkeiten" target="_blank" rel="noopener">Freiwillig spenden</a>
+
+            <?php if ($isAdmin): ?>
+                <a class="btn" href="fallback.php" target="_blank">Fallback-Seite öffnen</a>
+                <a class="btn" href="status.php" target="_blank">Status JSON</a>
+                <a class="btn" href="system_report.php">Systemauswertung</a>
+                <a class="btn" href="view_log.php">Logs anzeigen</a>
+                <a class="btn" href="backups.php">Backups</a>
+                <form action="watchdog_reset.php" method="post" style="display:inline">
+                    <button class="secondary" type="submit">Watchdog zurücksetzen</button>
+                </form>
+            <?php endif; ?>
         </div>
+        <p class="small">
+            Diese Software steht zur freien Verwendung bereit. Es entstehen keine Kosten.
+            Wer unterstützen möchte, kann freiwillig an Caritas Tirol spenden.
+        </p>
     </div>
 <?php endif; ?>
 

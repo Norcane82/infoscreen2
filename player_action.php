@@ -1,8 +1,8 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/inc/bootstrap.php';
+require_once __DIR__ . '/auth.php';
 
 function redirect_admin_player_action(): void
 {
@@ -106,6 +106,13 @@ function request_system_reboot(): void
 }
 
 $action = trim((string)($_POST['action'] ?? ''));
+
+if ($action === 'restart_player') {
+    auth_require_editor();
+} else {
+    auth_require_admin();
+}
+
 $fallbackFile = __DIR__ . '/cache/fallback_active.flag';
 
 if ($action === 'restart_player') {
